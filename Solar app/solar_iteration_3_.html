@@ -2336,9 +2336,10 @@ function animate(){
   const camDist = camera.position.length();
   const outsideSkybox = camDist > SKYBOX_RADIUS;
   skybox.visible = !outsideSkybox;
-  if (milkyWayModel) milkyWayModel.visible = outsideSkybox;
-  if (beauGaDisc)    beauGaDisc.visible    = outsideSkybox;
-  solarSystemMarker.visible = outsideSkybox;
+  const showGalaxy = outsideSkybox || galacticViewActive;
+  if (milkyWayModel) milkyWayModel.visible = showGalaxy;
+  if (beauGaDisc)    beauGaDisc.visible    = showGalaxy;
+  solarSystemMarker.visible = outsideSkybox && !galacticViewActive;
   const _ssBtn = document.getElementById('solarSystemBtn');
   if (_ssBtn) _ssBtn.style.display = outsideSkybox ? 'block' : 'none';
 
