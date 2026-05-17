@@ -205,23 +205,37 @@ Speed<br>
   border-radius: 8px;
   border: 1px solid rgba(100,150,255,0.4);
   line-height: 1.9;
+  width: 200px;
+  box-sizing: border-box;
 ">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-    <div style="font-size:14px; font-weight:bold; color:#88aaff;">&#127757; Galactic Speed</div>
-    <button onclick="returnToMainMenu()" style="
-      background: rgba(255,255,255,0.12);
-      color: white;
-      border: 1px solid rgba(255,255,255,0.3);
-      padding: 3px 10px;
-      cursor: pointer;
-      border-radius: 4px;
-      font-size: 12px;
-    ">&#8592; Solar System</button>
+    <div style="font-size:14px; font-weight:bold; color:#88aaff;">&#127757; Galaxy Edit</div>
+    <div style="display:flex; gap:4px;">
+      <button onclick="returnToMainMenu()" style="
+        background: rgba(255,255,255,0.12);
+        color: white;
+        border: 1px solid rgba(255,255,255,0.3);
+        padding: 3px 8px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 11px;
+      ">&#8592; Solar System</button>
+      <button onclick="collapseGalacticLegend()" style="
+        background: rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.7);
+        border: 1px solid rgba(255,255,255,0.25);
+        padding: 3px 7px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 13px;
+        line-height: 1;
+      ">&#x2715;</button>
+    </div>
   </div>
   <div style="border-top:1px solid rgba(255,255,255,0.15); margin-bottom:10px;"></div>
   <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
     <input id="galSpeed" type="range" min="-4" max="4" step="0.01" value="-4"
-      list="galSpeedTicks" style="width:200px;">
+      list="galSpeedTicks" style="width:130px;">
     <datalist id="galSpeedTicks">
       <option value="-4"></option>
       <option value="-2"></option>
@@ -288,6 +302,22 @@ Speed<br>
     width: 100%;
   ">Spaceship Earth &#8594;</button>
 </div>
+
+<div id="galacticLegendCollapsed" onclick="expandGalacticLegend()" style="
+  display: none;
+  position: absolute;
+  bottom: 24px;
+  left: 20px;
+  background: rgba(5,10,30,0.88);
+  color: #88aaff;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(100,150,255,0.4);
+  cursor: pointer;
+  user-select: none;
+">Show Galaxy Edit Bar</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
@@ -1884,6 +1914,7 @@ function enterGalacticView() {
 
   document.getElementById('simTimeBlock').style.display = 'none';
   document.getElementById('galacticLegend').style.display = 'block';
+  document.getElementById('galacticLegendCollapsed').style.display = 'none';
 
   camera.position.set(GAL_R * 0.5, GAL_R * 0.7, GAL_R * 1.5);
   camera.up.set(0, 1, 0);
@@ -1928,6 +1959,7 @@ function exitGalacticView() {
 
   document.getElementById('simTimeBlock').style.display = '';
   document.getElementById('galacticLegend').style.display = 'none';
+  document.getElementById('galacticLegendCollapsed').style.display = 'none';
 
   // Always return to a clean view centred on the sun
   camera.position.set(0, 22, 110);
@@ -1957,6 +1989,7 @@ function flyToSolarSystem() {
     }
     document.getElementById('simTimeBlock').style.display = '';
     document.getElementById('galacticLegend').style.display = 'none';
+    document.getElementById('galacticLegendCollapsed').style.display = 'none';
     document.getElementById('galacticBtn').textContent = 'Galactic View';
     document.getElementById('seFromGalBtn').textContent = 'Spaceship Earth →';
   }
@@ -2011,8 +2044,8 @@ function flyToMilkyWay() {
   document.getElementById('panelContent').innerHTML = MILKY_WAY_INFO;
   document.getElementById('backToList').style.display = 'inline-block';
 
-  // Already in galactic view — just show the panel, keep camera where it is
-  if (galacticViewActive) return;
+  // Exit galactic view first so the camera can fly to the full galaxy from solar-system space
+  if (galacticViewActive) exitGalacticView();
 
   // Camera destination: above the galactic disc, looking down at the core
   const R = galaxyVisualRadius;
@@ -2055,6 +2088,15 @@ document.getElementById('galacticBtn').onclick = () => {
 function returnToMainMenu() {
   if (galacticViewActive) exitGalacticView();
   if (spaceshipViewActive) exitSpaceshipView();
+}
+
+function collapseGalacticLegend() {
+  document.getElementById('galacticLegend').style.display = 'none';
+  document.getElementById('galacticLegendCollapsed').style.display = 'block';
+}
+function expandGalacticLegend() {
+  document.getElementById('galacticLegend').style.display = 'block';
+  document.getElementById('galacticLegendCollapsed').style.display = 'none';
 }
 
 function enterSpaceshipFromGalactic() {
