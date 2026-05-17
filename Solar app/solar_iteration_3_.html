@@ -414,10 +414,17 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
 
   // --- BeauGa.png flat galaxy disc ---
   const beauGaTex = new THREE.TextureLoader().load('BeauGa.png');
+  // BeauGa.png is 1920×1080. CircleGeometry maps UV equally in U and V, but U spans
+  // 960px from center while V only spans 540px — producing a 1.78:1 stretch.
+  // Correct by zooming U in to the centre 1080×1080 square of the image.
+  beauGaTex.wrapS = THREE.ClampToEdgeWrapping;
+  beauGaTex.wrapT = THREE.ClampToEdgeWrapping;
+  beauGaTex.repeat.set(1080 / 1920, 1.0);
+  beauGaTex.offset.set((1.0 - 1080 / 1920) / 2.0, 0);
   const beauGaMat = new THREE.MeshBasicMaterial({
     map: beauGaTex,
     transparent: true,
-    alphaTest: 0.05,
+    blending: THREE.AdditiveBlending,
     color: 0xddccff,
     depthWrite: false,
     side: THREE.DoubleSide
