@@ -254,11 +254,12 @@ Speed<br>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 6000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 100000);
 camera.position.set(0, 22, 110);
 
 // Tilt the camera's "up" vector by 23.4° so the ecliptic plane appears inclined
@@ -278,6 +279,7 @@ document.body.appendChild(renderer.domElement);
 // Controls
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enablePan = false;
+controls.maxDistance = 50000;
 
 // Lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.15));
@@ -313,6 +315,18 @@ const skyMaterial = new THREE.MeshBasicMaterial({
 });
 const skybox = new THREE.Mesh(skyGeometry, skyMaterial);
 scene.add(skybox);
+
+// --- Milky Way GLB Model ---
+const gltfLoader = new THREE.GLTFLoader();
+gltfLoader.load('need_some_space.glb', function(gltf) {
+  const milkyWayModel = gltf.scene;
+  milkyWayModel.scale.set(300, 300, 300);
+  milkyWayModel.rotation.x = Math.PI / 2;
+  scene.add(milkyWayModel);
+  console.log('Milky Way GLB loaded successfully');
+}, undefined, function(error) {
+  console.error('GLB load error:', error);
+});
 
 // SUN CORE (keep emissive low so shading is visible)
 const sun = new THREE.Mesh(
