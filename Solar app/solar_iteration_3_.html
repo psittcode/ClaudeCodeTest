@@ -1783,6 +1783,10 @@ let galSavedCamPos      = null;
 let galSavedCamTarget   = null;
 let galSavedCamUp       = null;
 let galSavedHelioVis    = null;
+let galSavedMilkyWayScale = null;
+let galSavedMilkyWayPos   = null;
+let galSavedBeauGaScale   = null;
+let galSavedBeauGaPos     = null;
 let galacticSpeed       = 0.1;  // Myr/s — driven by log slider, independent of planet speed
 let galacticAngle       = 0;    // radians, accumulated each frame
 let galPaused           = false;
@@ -1808,6 +1812,27 @@ function enterGalacticView() {
   galSavedCamPos    = camera.position.clone();
   galSavedCamTarget = controls.target.clone();
   galSavedCamUp     = camera.up.clone();
+
+  // Rescale galaxy objects to fit the galactic-view schematic (GAL_R = 280 units).
+  // beauGaDisc: place centre at galactic origin (0,0,0) and shrink radius to 400.
+  // milkyWayModel: same centre transformation — translate so galacticCorePos lands at
+  //   origin, then scale uniformly so galaxy visual radius equals 400.
+  if (galaxyVisualRadius > 0) {
+    const f = 400 / galaxyVisualRadius;
+    if (beauGaDisc) {
+      galSavedBeauGaScale = beauGaDisc.scale.clone();
+      galSavedBeauGaPos   = beauGaDisc.position.clone();
+      beauGaDisc.scale.setScalar(f);
+      beauGaDisc.position.set(0, 0, 0);
+    }
+    if (milkyWayModel) {
+      galSavedMilkyWayScale = milkyWayModel.scale.clone();
+      galSavedMilkyWayPos   = milkyWayModel.position.clone();
+      const newMWPos = milkyWayModel.position.clone().sub(galacticCorePos).multiplyScalar(f);
+      milkyWayModel.scale.multiplyScalar(f);
+      milkyWayModel.position.copy(newMWPos);
+    }
+  }
 
   lockedObject = null;
   galacticViewActive = true;
@@ -1852,12 +1877,28 @@ function enterGalacticView() {
   document.getElementById('galacticBtn').textContent = 'Exit Galactic View';
 }
 
+function _restoreGalaxyScale() {
+  if (galSavedMilkyWayScale && milkyWayModel) {
+    milkyWayModel.scale.copy(galSavedMilkyWayScale);
+    milkyWayModel.position.copy(galSavedMilkyWayPos);
+    galSavedMilkyWayScale = null;
+    galSavedMilkyWayPos   = null;
+  }
+  if (galSavedBeauGaScale && beauGaDisc) {
+    beauGaDisc.scale.copy(galSavedBeauGaScale);
+    beauGaDisc.position.copy(galSavedBeauGaPos);
+    galSavedBeauGaScale = null;
+    galSavedBeauGaPos   = null;
+  }
+}
+
 function exitGalacticView() {
   // Clear any camera lock before restoring position — prevents one-frame jump
   lockedObject = null;
   galEarthZoomedIn = false;
   document.getElementById('seFromGalBtn').textContent = 'Spaceship Earth →';
 
+  _restoreGalaxyScale();
   galacticViewActive = false;
   galacticGroup.visible = false;
   galEarthMarker.visible = false;
@@ -1888,6 +1929,7 @@ function flyToSolarSystem() {
   if (galacticViewActive) {
     lockedObject = null;
     galEarthZoomedIn = false;
+    _restoreGalaxyScale();
     galacticViewActive = false;
     galacticGroup.visible = false;
     galEarthMarker.visible = false;
