@@ -1938,6 +1938,7 @@ function enterGalacticView() {
   document.getElementById('galGridBtn').textContent = 'Hide Grid & Plane';
   updateGalElapsedDisplay();
 
+  document.getElementById('panel').style.display = 'none';
   document.getElementById('simTimeBlock').style.display = 'none';
   const _galPanel = document.getElementById('galacticLegend');
   _galPanel.style.top    = '8px';
@@ -2004,6 +2005,7 @@ function exitGalacticView() {
 // Fly the camera from wherever it is back into the solar system (triggered by the
 // "The Solar System" button that appears when zoomed out to galaxy scale).
 function flyToSolarSystem() {
+  document.getElementById('panel').style.display = 'none';
   // Clean up galactic view state without jumping the camera position
   if (galacticViewActive) {
     lockedObject = null;
@@ -2119,6 +2121,7 @@ document.getElementById('galacticBtn').onclick = () => {
 function returnToMainMenu() {
   if (galacticViewActive) exitGalacticView();
   if (spaceshipViewActive) exitSpaceshipView();
+  document.getElementById('panel').style.display = 'none';
 }
 
 function collapseGalacticLegend() {
@@ -2448,6 +2451,7 @@ let seSavedHelioVis     = null;
 function enterSpaceshipView() {
   spaceshipEnteredFrom = 'main';
   if (galacticViewActive) exitGalacticView();
+  document.getElementById('panel').style.display = 'none';
 
   // Hide every heliocentric object explicitly — lights and alternate-view groups untouched
   seSavedHelioVis = helioObjects.map(o => o.visible);
