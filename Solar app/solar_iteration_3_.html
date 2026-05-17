@@ -2005,7 +2005,7 @@ function exitGalacticView() {
 // Fly the camera from wherever it is back into the solar system (triggered by the
 // "The Solar System" button that appears when zoomed out to galaxy scale).
 function flyToSolarSystem() {
-  document.getElementById('panel').style.display = 'none';
+  showBodiesList();
   // Clean up galactic view state without jumping the camera position
   if (galacticViewActive) {
     lockedObject = null;
@@ -2114,14 +2114,14 @@ function flyToMilkyWay() {
 }
 
 document.getElementById('galacticBtn').onclick = () => {
-  if (galacticViewActive) exitGalacticView();
+  if (galacticViewActive) { exitGalacticView(); showBodiesList(); }
   else enterGalacticView();
 };
 
 function returnToMainMenu() {
   if (galacticViewActive) exitGalacticView();
   if (spaceshipViewActive) exitSpaceshipView();
-  document.getElementById('panel').style.display = 'none';
+  showBodiesList();
 }
 
 function collapseGalacticLegend() {
@@ -2485,6 +2485,7 @@ function enterSpaceshipView() {
 function exitSpaceshipView() {
   if (spaceshipEnteredFrom === 'galactic') { returnToGalacticFromSpaceship(); return; }
   spaceshipViewActive = false;
+  showBodiesList();
   spaceshipGroup.visible = false;
   document.getElementById('spaceshipLegend').style.display = 'none';
 
@@ -2879,6 +2880,12 @@ document.getElementById("backToList").addEventListener("click", () => {
   showList();
 });
 
+function showBodiesList() {
+  listVisible = true;
+  showList();
+  document.getElementById('toggleList').textContent = 'Hide Bodies';
+}
+
 // Toggle list button
 let listVisible = false;
 document.getElementById("toggleList").addEventListener("click", () => {
@@ -2891,6 +2898,9 @@ document.getElementById("toggleList").addEventListener("click", () => {
     document.getElementById("toggleList").textContent = "Show Bodies";
   }
 });
+
+// Show bodies list on initial load
+showBodiesList();
 
 // Press Escape to unlock camera
 window.addEventListener("keydown", e => {
