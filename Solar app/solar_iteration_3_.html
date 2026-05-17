@@ -351,16 +351,20 @@ solarSystemMarker.add(ssDot);
 const gltfLoader = new THREE.GLTFLoader();
 gltfLoader.load('need_some_space.glb', function(gltf) {
   milkyWayModel = gltf.scene;
-  // Scale large enough that the galaxy extends well beyond the skybox sphere (radius 20000).
   milkyWayModel.scale.set(50000, 50000, 50000);
-  // No rotation — the GLB disc is already flat in the XZ plane.
-  // Any X rotation tilts it toward vertical; 0 keeps it horizontal.
   milkyWayModel.rotation.set(0, 0, 0);
-  // Offset the galactic centre away from the solar system so the Sun
-  // appears embedded in an outer arm rather than at the dead centre.
-  milkyWayModel.position.set(-20000, 0, 0);
-  milkyWayModel.visible = false;
   scene.add(milkyWayModel);
+
+  // Compute the actual bounding box of the loaded geometry and shift the model
+  // so its visual centre sits exactly at world origin (0,0,0). This ensures:
+  //   • the solar system (also at origin) is embedded inside the galaxy
+  //   • OrbitControls orbiting around origin always rotates around the galaxy centre
+  //   • the galaxy never appears offset or top-left on screen
+  const box = new THREE.Box3().setFromObject(milkyWayModel);
+  const center = box.getCenter(new THREE.Vector3());
+  milkyWayModel.position.sub(center);
+
+  milkyWayModel.visible = false;
   console.log('Milky Way GLB loaded successfully');
 }, undefined, function(error) {
   console.error('GLB load error:', error);
