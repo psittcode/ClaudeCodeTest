@@ -382,6 +382,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
   milkyWayModel = gltf.scene;
   milkyWayModel.scale.set(50000, 50000, 50000);
   milkyWayModel.rotation.set(0, 0, 0);
+  milkyWayModel.renderOrder = 1;
   scene.add(milkyWayModel);
 
   // Compute the actual bounding box of the loaded geometry and shift the model
@@ -435,6 +436,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
   );
   beauGaDisc.rotation.x = -Math.PI / 2;
   beauGaDisc.position.copy(galacticCorePos);
+  beauGaDisc.renderOrder = 0;
   scene.add(beauGaDisc);
 
   milkyWayModel.visible = false;
