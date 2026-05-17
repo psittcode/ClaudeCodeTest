@@ -208,7 +208,7 @@ Speed<br>
   width: 200px;
   box-sizing: border-box;
 ">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+  <div id="galLegendHeader" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; cursor:grab; user-select:none;">
     <div style="font-size:14px; font-weight:bold; color:#88aaff;">&#127757; Galaxy Edit</div>
     <div style="display:flex; gap:4px;">
       <button onclick="returnToMainMenu()" style="
@@ -301,6 +301,17 @@ Speed<br>
     font-size: 12px;
     width: 100%;
   ">Spaceship Earth &#8594;</button>
+  <div id="galLegendResizeGrip" style="
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    border-bottom: 2px solid rgba(100,150,255,0.5);
+    border-right: 2px solid rgba(100,150,255,0.5);
+    border-radius: 0 0 7px 0;
+  "></div>
 </div>
 
 <div id="galacticLegendCollapsed" onclick="expandGalacticLegend()" style="
@@ -2098,6 +2109,59 @@ function expandGalacticLegend() {
   document.getElementById('galacticLegend').style.display = 'block';
   document.getElementById('galacticLegendCollapsed').style.display = 'none';
 }
+
+// ── Drag and resize for the Galaxy Edit panel ──────────────────────────────
+(function() {
+  const panel  = document.getElementById('galacticLegend');
+  const header = document.getElementById('galLegendHeader');
+  const grip   = document.getElementById('galLegendResizeGrip');
+
+  // On first interaction, convert CSS bottom/left into inline top/left so that
+  // the element can be freely repositioned without fighting the stylesheet.
+  function ensureTopLeft() {
+    if (panel.style.bottom === 'auto') return;
+    panel.style.top    = panel.offsetTop  + 'px';
+    panel.style.left   = panel.offsetLeft + 'px';
+    panel.style.bottom = 'auto';
+  }
+
+  // ── Drag ──────────────────────────────────────────────────────────────────
+  let drag = null;
+  header.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'BUTTON') return; // let button clicks pass through
+    ensureTopLeft();
+    drag = { ox: e.clientX - panel.offsetLeft, oy: e.clientY - panel.offsetTop };
+    header.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    panel.style.left = Math.max(0, Math.min(window.innerWidth  - panel.offsetWidth,  e.clientX - drag.ox)) + 'px';
+    panel.style.top  = Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, e.clientY - drag.oy)) + 'px';
+  });
+  document.addEventListener('mouseup', () => {
+    if (drag) { drag = null; header.style.cursor = 'grab'; }
+  });
+
+  // ── Resize ────────────────────────────────────────────────────────────────
+  let resz = null;
+  grip.addEventListener('mousedown', e => {
+    ensureTopLeft();
+    resz = {
+      sx: e.clientX, sy: e.clientY,
+      sw: panel.offsetWidth, sh: panel.offsetHeight
+    };
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!resz) return;
+    panel.style.width    = Math.max(160, resz.sw + (e.clientX - resz.sx)) + 'px';
+    panel.style.height   = Math.max(100, resz.sh + (e.clientY - resz.sy)) + 'px';
+    panel.style.overflowY = 'auto';
+  });
+  document.addEventListener('mouseup', () => { resz = null; });
+})();
 
 function enterSpaceshipFromGalactic() {
   // Save galactic camera so we can restore it when returning
