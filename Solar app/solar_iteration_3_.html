@@ -258,7 +258,7 @@ Speed<br>
 <script>
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 6000);
 camera.position.set(0, 22, 110);
 
 // Tilt the camera's "up" vector by 23.4° so the ecliptic plane appears inclined
@@ -306,7 +306,7 @@ const ganymedeTexture = textureLoader.load("Ganymede.jpeg");
 const ioTexture = textureLoader.load("Io.jpeg");
 
 // 🌌 MILKY WAY SKYBOX
-const skyGeometry = new THREE.SphereGeometry(500, 64, 64);
+const skyGeometry = new THREE.SphereGeometry(5000, 64, 64);
 const skyMaterial = new THREE.MeshBasicMaterial({
   map: milkyWayTexture,
   side: THREE.BackSide // render on the inside of the sphere
