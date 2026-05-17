@@ -128,6 +128,19 @@ Speed<br>
   width: 100%;
   margin-top: 4px;
 ">The Solar System</button>
+
+<button id="milkyWayBtn" onclick="flyToMilkyWay()" style="
+  display: none;
+  background: rgba(100,180,255,0.2);
+  color: white;
+  border: 1px solid rgba(100,180,255,0.5);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 13px;
+  width: 100%;
+  margin-top: 4px;
+">The Milky Way Galaxy</button>
 </div>
 
 <!-- Spaceship Earth legend panel -->
@@ -332,6 +345,8 @@ scene.add(skybox);
 
 // --- Milky Way GLB Model + Solar System Marker ---
 let milkyWayModel = null;
+let galacticCorePos = null;   // world-space position of the galactic centre (set on GLB load)
+let galaxyVisualRadius = 0;   // half the galaxy's XZ extent in scene units
 
 // Solar System marker lives in world space at origin (the Sun's actual scene position)
 const solarSystemMarker = new THREE.Group();
@@ -384,6 +399,17 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
   milkyWayModel.position.x -= galaxyRadius * 0.52;
   // Sun sits ~50–80 ly above the galactic midplane — negligible at galaxy scale (~0.1%)
   milkyWayModel.position.y -= galaxyRadius * 0.001;
+
+  // Store galactic centre world position and radius for the fly-to-galaxy button
+  galacticCorePos = new THREE.Vector3(
+    -(galaxyRadius * 0.52),
+    -(galaxyRadius * 0.001),
+    0
+  );
+  galaxyVisualRadius = galaxyRadius;
+  // Reveal the Milky Way navigation button now that the model is ready
+  const mwBtn = document.getElementById('milkyWayBtn');
+  if (mwBtn) mwBtn.style.display = 'block';
 
   milkyWayModel.visible = false;
   console.log('Milky Way GLB loaded successfully');
@@ -1872,6 +1898,59 @@ function flyToSolarSystem() {
     controls.update();
 
     if (t < 1) requestAnimationFrame(flyIn);
+    else isFlyingTo = false;
+  })();
+}
+
+const MILKY_WAY_INFO = `
+<b style="font-size:15px;letter-spacing:0.5px;">The Milky Way Galaxy</b><br><br>
+The Milky Way is our home galaxy — a barred spiral galaxy approximately 100,000 light-years in diameter and about 1,000 light-years thick. It is a gravitationally bound collection of stars, swirling in a spiral through space, and is one of an estimated 2 trillion galaxies in the observable universe.<br><br>
+The Milky Way formed approximately 14 billion years ago and contains stars, clouds of dust and gas called nebulae, planets, and asteroids. Stars, dust, and gas fan out from the center of the galaxy in long, spiraling arms.<br><br>
+The Milky Way's spiral structure is dominated by two major arms — Scutum-Centaurus and Perseus — wrapping off the ends of a central bar of stars. Two additional minor arms, Norma and Sagittarius, are less distinct and primarily filled with gas and pockets of star-forming activity.<br><br>
+It is estimated that the Milky Way contains around 100 to 400 billion stars, including our own Sun. Our solar system sits about 26,000 light-years from the galactic center, and it takes approximately 250 million years for our Sun — and Earth along with it — to complete one full revolution around that center.<br><br>
+At the very heart of the galaxy lies a supermassive black hole known as Sagittarius A* (Sgr A*). Sgr A* has a mass about 4 million times that of our Sun. Because of its relative proximity to Earth at 26,000 light-years, researchers can observe how matter interacts with the black hole.<br><br>
+The Milky Way is surrounded by a stellar halo roughly 300,000 light-years across, and an even larger dark matter halo approximately one million light-years across — about ten times the width of the galaxy's disk.<br><br>
+The Milky Way resides in a neighborhood of over 50 galaxies called the Local Group, whose members range from small dwarf galaxies to Andromeda, our nearest large galactic neighbor.<br><br>
+<span style="font-size:10px;opacity:0.6;">Source: NASA Science – Galaxies; NASA – Milky Way Galaxy; NASA Scientific Visualization Studio</span>
+`;
+
+function flyToMilkyWay() {
+  if (!galacticCorePos) return; // GLB not yet loaded
+
+  // Show galaxy info in the side panel
+  document.getElementById('panel').style.display = 'block';
+  document.getElementById('panelContent').innerHTML = MILKY_WAY_INFO;
+  document.getElementById('backToList').style.display = 'inline-block';
+
+  // Camera destination: above the galactic disc, looking down at the core
+  const R = galaxyVisualRadius;
+  const endTarget = galacticCorePos.clone();
+  const endPos = new THREE.Vector3(
+    galacticCorePos.x + R * 0.2,
+    galacticCorePos.y + R * 1.4,
+    galacticCorePos.z + R * 0.8
+  );
+
+  lockedObject = null;
+  const myGeneration = ++flyGeneration;
+  isFlyingTo = true;
+
+  const startPos    = camera.position.clone();
+  const startTarget = controls.target.clone();
+
+  let t = 0;
+  (function flyOut() {
+    if (myGeneration !== flyGeneration) { isFlyingTo = false; return; }
+    t += 0.01; // ~100-frame arc for a sweeping feel
+    if (t > 1) t = 1;
+    const ease = t * t * (3 - 2 * t);
+
+    camera.position.lerpVectors(startPos, endPos, ease);
+    controls.target.lerpVectors(startTarget, endTarget, ease);
+    camera.up.set(0, 1, 0); // standard Y-up when viewing the galaxy face-on
+    controls.update();
+
+    if (t < 1) requestAnimationFrame(flyOut);
     else isFlyingTo = false;
   })();
 }
