@@ -301,17 +301,6 @@ Speed<br>
     font-size: 12px;
     width: 100%;
   ">Spaceship Earth &#8594;</button>
-  <button id="otherGalaxiesBtn" style="
-    background: rgba(255,160,80,0.2);
-    color: #ffb060;
-    border: 1px solid rgba(255,160,80,0.5);
-    padding: 5px 14px;
-    cursor: pointer;
-    border-radius: 4px;
-    font-size: 12px;
-    width: 100%;
-    margin-top: 4px;
-  ">Other Galaxies &#8594;</button>
   <div id="galLegendResizeGrip" style="
     position: absolute;
     bottom: 0;
@@ -341,7 +330,7 @@ Speed<br>
   user-select: none;
 ">Show Galaxy Edit Bar</div>
 
-<!-- KEPLER PAGE OVERLAY -->
+<!-- KEPLER PAGE OVERLAY — only the back button; info shown in the existing #panel -->
 <div id="keplerPage" style="
   display: none;
   position: absolute;
@@ -349,20 +338,6 @@ Speed<br>
   pointer-events: none;
   font-family: sans-serif;
 ">
-  <!-- Title -->
-  <div style="
-    position: absolute;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: white;
-    font-size: 22px;
-    font-weight: bold;
-    letter-spacing: 1px;
-    text-shadow: 0 0 12px rgba(255,180,80,0.8), 0 2px 6px rgba(0,0,0,0.9);
-    pointer-events: none;
-  ">Kepler-22b</div>
-  <!-- Back button -->
   <button id="keplerBackBtn" style="
     position: absolute;
     top: 20px;
@@ -2172,13 +2147,24 @@ The Milky Way resides in a neighborhood of over 50 galaxies called the Local Gro
 <span style="font-size:10px;opacity:0.6;">Source: NASA Science – Galaxies; NASA – Milky Way Galaxy; NASA Scientific Visualization Studio</span>
 `;
 
-function flyToMilkyWay() {
-  if (!galacticCorePos) return; // GLB not yet loaded
+const KEPLER_22B_INFO = `<b>Kepler-22b</b><br><br>More information coming soon.`;
 
-  // Show galaxy info in the side panel
+function showMilkyWayPanel() {
   document.getElementById('panel').style.display = 'block';
   document.getElementById('panelContent').innerHTML = MILKY_WAY_INFO;
   document.getElementById('backToList').style.display = 'none';
+  // "Other Galaxies" button at the bottom of the Milky Way info panel
+  const btn = document.createElement('button');
+  btn.style.cssText = 'background:rgba(255,160,80,0.2);color:#ffb060;border:1px solid rgba(255,160,80,0.5);padding:6px 12px;cursor:pointer;border-radius:4px;font-size:13px;margin-top:12px;width:100%;display:block';
+  btn.textContent = 'Other Galaxies →';
+  btn.addEventListener('click', (e) => { e.stopPropagation(); enterKeplerView(); });
+  document.getElementById('panelContent').appendChild(btn);
+}
+
+function flyToMilkyWay() {
+  if (!galacticCorePos) return; // GLB not yet loaded
+
+  showMilkyWayPanel();
 
   // Exit galactic view first so the camera can fly to the full galaxy from solar-system space
   if (galacticViewActive) exitGalacticView();
@@ -2668,11 +2654,13 @@ function enterKeplerView() {
   keplerViewActive = true;
   controls.enabled = false; // prevent main OrbitControls from consuming mouse input
 
-  document.getElementById('galacticLegend').style.display          = 'none';
-  document.getElementById('galacticLegendCollapsed').style.display = 'none';
-  document.getElementById('speedPanel').style.display              = 'none';
-  document.getElementById('panel').style.display                   = 'none';
-  document.getElementById('keplerPage').style.display              = 'block';
+  document.getElementById('speedPanel').style.display = 'none';
+  document.getElementById('keplerPage').style.display = 'block';
+
+  // Show Kepler-22b info in the existing panel
+  document.getElementById('panel').style.display = 'block';
+  document.getElementById('panelContent').innerHTML = KEPLER_22B_INFO;
+  document.getElementById('backToList').style.display = 'none';
 
   // Reset camera to default view of Kepler-22b
   keplerCamera.position.set(0, 0.5, 5.5);
@@ -2684,13 +2672,14 @@ function exitKeplerView() {
   keplerViewActive = false;
   controls.enabled = true;
 
-  document.getElementById('keplerPage').style.display   = 'none';
-  document.getElementById('speedPanel').style.display   = 'block';
-  document.getElementById('galacticLegend').style.display = 'block'; // restore galactic panel
+  document.getElementById('keplerPage').style.display = 'none';
+  document.getElementById('speedPanel').style.display = 'block';
+
+  // Restore the Milky Way panel (where the user came from)
+  showMilkyWayPanel();
 }
 
-document.getElementById('otherGalaxiesBtn').onclick = () => { enterKeplerView(); };
-document.getElementById('keplerBackBtn').onclick    = () => { exitKeplerView(); };
+document.getElementById('keplerBackBtn').onclick = () => { exitKeplerView(); };
 
 function animate(){
   requestAnimationFrame(animate);
