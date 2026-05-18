@@ -301,6 +301,17 @@ Speed<br>
     font-size: 12px;
     width: 100%;
   ">Spaceship Earth &#8594;</button>
+  <button id="otherGalaxiesBtn" style="
+    background: rgba(255,160,80,0.2);
+    color: #ffb060;
+    border: 1px solid rgba(255,160,80,0.5);
+    padding: 5px 14px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    width: 100%;
+    margin-top: 4px;
+  ">Other Galaxies &#8594;</button>
   <div id="galLegendResizeGrip" style="
     position: absolute;
     bottom: 0;
@@ -329,6 +340,44 @@ Speed<br>
   cursor: pointer;
   user-select: none;
 ">Show Galaxy Edit Bar</div>
+
+<!-- KEPLER PAGE OVERLAY -->
+<div id="keplerPage" style="
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: sans-serif;
+">
+  <!-- Title -->
+  <div style="
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(255,180,80,0.8), 0 2px 6px rgba(0,0,0,0.9);
+    pointer-events: none;
+  ">Kepler-22b</div>
+  <!-- Back button -->
+  <button id="keplerBackBtn" style="
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(255,160,80,0.2);
+    color: #ffb060;
+    border: 1px solid rgba(255,160,80,0.5);
+    padding: 6px 14px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: sans-serif;
+    pointer-events: auto;
+  ">&#8592; Back to the Milky Way Galaxy</button>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
@@ -2573,8 +2622,85 @@ document.getElementById('seResetBtn').onclick = () => {
 // Animation
 let lastFrameMs = performance.now();
 
+// ── Kepler-22b View ──────────────────────────────────────────────────────────
+let keplerViewActive = false;
+let keplerScene      = null;
+let keplerCamera     = null;
+let keplerControls   = null;
+
+function initKeplerScene() {
+  if (keplerScene) return;
+  keplerScene = new THREE.Scene();
+
+  // Skybox — same texture and radius as the main scene
+  keplerScene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(SKYBOX_RADIUS, 64, 64),
+    new THREE.MeshBasicMaterial({ map: milkyWayTexture, side: THREE.BackSide })
+  ));
+
+  // Lighting
+  keplerScene.add(new THREE.AmbientLight(0xffffff, 0.35));
+  const kLight = new THREE.PointLight(0xfff5e0, 2.5, 0, 1.2);
+  kLight.position.set(8, 4, 6);
+  keplerScene.add(kLight);
+
+  // Kepler-22b: 2.4 × Earth's radius (Earth size = 0.55)
+  const kTex = textureLoader.load("Kepler 22b_0.jpeg");
+  keplerScene.add(new THREE.Mesh(
+    new THREE.SphereGeometry(0.55 * 2.4, 64, 64),
+    new THREE.MeshStandardMaterial({ map: kTex })
+  ));
+
+  keplerCamera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, SKYBOX_RADIUS * 2);
+  keplerCamera.position.set(0, 0.5, 5.5);
+
+  keplerControls = new THREE.OrbitControls(keplerCamera, renderer.domElement);
+  keplerControls.enableDamping = true;
+  keplerControls.dampingFactor = 0.08;
+  keplerControls.minDistance   = 1.8;
+  keplerControls.maxDistance   = 60;
+  keplerControls.target.set(0, 0, 0);
+  keplerControls.update();
+}
+
+function enterKeplerView() {
+  initKeplerScene();
+  keplerViewActive = true;
+  controls.enabled = false; // prevent main OrbitControls from consuming mouse input
+
+  document.getElementById('galacticLegend').style.display          = 'none';
+  document.getElementById('galacticLegendCollapsed').style.display = 'none';
+  document.getElementById('speedPanel').style.display              = 'none';
+  document.getElementById('panel').style.display                   = 'none';
+  document.getElementById('keplerPage').style.display              = 'block';
+
+  // Reset camera to default view of Kepler-22b
+  keplerCamera.position.set(0, 0.5, 5.5);
+  keplerControls.target.set(0, 0, 0);
+  keplerControls.update();
+}
+
+function exitKeplerView() {
+  keplerViewActive = false;
+  controls.enabled = true;
+
+  document.getElementById('keplerPage').style.display   = 'none';
+  document.getElementById('speedPanel').style.display   = 'block';
+  document.getElementById('galacticLegend').style.display = 'block'; // restore galactic panel
+}
+
+document.getElementById('otherGalaxiesBtn').onclick = () => { enterKeplerView(); };
+document.getElementById('keplerBackBtn').onclick    = () => { exitKeplerView(); };
+
 function animate(){
   requestAnimationFrame(animate);
+
+  // Kepler page takes over the renderer entirely — skip all solar-system logic
+  if (keplerViewActive) {
+    keplerControls.update();
+    renderer.render(keplerScene, keplerCamera);
+    return;
+  }
 
   // Real elapsed ms since last frame, capped to avoid huge jumps after tab switches
   const nowMs = performance.now();
@@ -2967,6 +3093,10 @@ window.addEventListener("keydown", e => {
 window.addEventListener("resize", ()=>{
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
+  if (keplerCamera) {
+    keplerCamera.aspect = innerWidth/innerHeight;
+    keplerCamera.updateProjectionMatrix();
+  }
   renderer.setSize(innerWidth,innerHeight);
 });
 </script>
