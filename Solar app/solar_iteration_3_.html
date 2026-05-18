@@ -1129,6 +1129,13 @@ data.forEach(p=>{
 const earth = meshes.find(m => m.userData.name === "Earth");
 const jupiter = meshes.find(m => m.userData.name === "Jupiter");
 
+const marsMesh = meshes.find(m => m.userData.name === "Mars");
+const marsOriginalMaterial = marsMesh.material;
+const marsOriginalInfo = marsMesh.userData.info;
+const marsTransformedInfo = `<b>Transformed Mars</b><br><br>Placeholder text — full content coming soon.`;
+let marsTransformed = false;
+let terraformedMarsModel = null;
+
 // Cloud layer
 const cloudTexture = textureLoader.load("2k_earth_clouds.jpg");
 const cloudMesh = new THREE.Mesh(
@@ -1446,6 +1453,43 @@ const helioObjects = [
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
+function refreshMarsPanel() {
+  const pc = document.getElementById("panelContent");
+  pc.innerHTML = marsTransformed ? marsTransformedInfo : marsOriginalInfo;
+  const btn = document.createElement("button");
+  btn.style.cssText = "background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.4);padding:6px 12px;cursor:pointer;border-radius:4px;font-size:13px;margin-top:12px;width:100%;display:block";
+  btn.textContent = marsTransformed ? "Restore Mars" : "Transform Mars";
+  btn.addEventListener("click", marsTransformed ? restoreMars : transformMars);
+  pc.appendChild(btn);
+}
+
+function transformMars() {
+  if (marsTransformed) return;
+  marsTransformed = true;
+  refreshMarsPanel();
+  gltfLoader.load("terraformed_mars.glb", function(gltf) {
+    terraformedMarsModel = gltf.scene;
+    const box = new THREE.Box3().setFromObject(terraformedMarsModel);
+    const center = box.getCenter(new THREE.Vector3());
+    terraformedMarsModel.position.sub(center);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    terraformedMarsModel.scale.setScalar((marsMesh.userData.size * 2) / maxDim);
+    marsMesh.material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+    marsMesh.add(terraformedMarsModel);
+  });
+}
+
+function restoreMars() {
+  if (!marsTransformed) return;
+  marsTransformed = false;
+  if (terraformedMarsModel) {
+    marsMesh.remove(terraformedMarsModel);
+    terraformedMarsModel = null;
+  }
+  marsMesh.material = marsOriginalMaterial;
+  refreshMarsPanel();
+}
 
 function flyToObject(obj) {
   if (!obj) return;
@@ -1458,7 +1502,11 @@ function flyToObject(obj) {
   if (!infoObj || !infoObj.userData.info) return;
 
   document.getElementById("panel").style.display = "block";
-  document.getElementById("panelContent").innerHTML = infoObj.userData.info;
+  if (infoObj.userData.name === "Mars") {
+    refreshMarsPanel();
+  } else {
+    document.getElementById("panelContent").innerHTML = infoObj.userData.info;
+  }
   document.getElementById("backToList").style.display = "inline-block";
 
   // Cancel any previous fly animation
