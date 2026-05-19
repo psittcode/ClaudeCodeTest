@@ -593,39 +593,21 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // Counter-rotating around Z cancels that tilt so the ring lies in the galaxy plane.
     bhScene.rotation.z = -Math.atan2(0.3661, 0.9306); // ≈ -0.375 rad
 
-    // Assign BH meshes to bloom layer and replace materials with a luminance-remap
-    // ShaderMaterial that maps all colours to a warm golden palette regardless of
-    // whether the source texture is red, green, or white.
+    // Replace every BH material with MeshBasicMaterial so the raw texture renders
+    // without any lighting. depthWrite=false on transparent meshes stops Z-fighting
+    // between the layered ring geometries (the actual cause of the flicker).
     bhScene.traverse(function(child) {
       if (!child.isMesh || !child.material) return;
       child.renderOrder = 3;
       const m = child.material;
-      if (!m.map) return;    // no texture — leave material as-is
-      child.material = new THREE.ShaderMaterial({
-        uniforms: { map: { value: m.map } },
-        vertexShader: [
-          'varying vec2 vUv;',
-          'void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}'
-        ].join(''),
-        fragmentShader: [
-          'uniform sampler2D map;',
-          'varying vec2 vUv;',
-          'void main(){',
-          '  vec4 tex=texture2D(map,vUv);',
-          '  float lum=dot(tex.rgb,vec3(0.299,0.587,0.114));',
-          '  vec3 dark=vec3(0.04,0.02,0.01);',
-          '  vec3 mid=vec3(0.16,0.10,0.05);',
-          '  vec3 bright=vec3(0.58,0.48,0.32);',
-          '  vec3 remapped=mix(mix(dark,mid,lum),bright,pow(lum,2.0));',
-          '  float origBlend=mix(0.50,0.06,smoothstep(0.0,0.25,lum));',
-          '  vec3 col=mix(remapped,tex.rgb*1.2,origBlend);',
-          '  col=clamp(col,0.0,0.52);',
-          '  gl_FragColor=vec4(col,tex.a);',
-          '}'
-        ].join('\n'),
-        transparent: m.transparent || false,
-        side:        m.side        !== undefined ? m.side      : THREE.FrontSide,
-        depthWrite:  m.depthWrite  !== undefined ? m.depthWrite : true
+      const isTransparent = m.transparent || (m.opacity !== undefined && m.opacity < 1);
+      child.material = new THREE.MeshBasicMaterial({
+        map:        m.map  || null,
+        color:      new THREE.Color(1, 1, 1),
+        transparent: isTransparent,
+        opacity:    m.opacity !== undefined ? m.opacity : 1,
+        side:       m.side   !== undefined ? m.side    : THREE.FrontSide,
+        depthWrite: !isTransparent
       });
     });
 
