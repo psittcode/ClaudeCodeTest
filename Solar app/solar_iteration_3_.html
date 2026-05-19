@@ -593,21 +593,104 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // Counter-rotating around Z cancels that tilt so the ring lies in the galaxy plane.
     bhScene.rotation.z = -Math.atan2(0.3661, 0.9306); // ≈ -0.375 rad
 
-    // Keep original GLB materials (MeshStandardMaterial with emissive maps) intact
-    // so PBR colors and self-glow render correctly.
-    // For transparent ring layers: disable both depthWrite AND depthTest so
-    // overlapping transparent fragments never Z-fight regardless of camera angle.
+    // Identify event horizon: the smallest non-transparent mesh (the central black sphere).
+    bhScene.updateMatrixWorld(true);
+    var _bhInfos = [];
+    bhScene.traverse(function(c) {
+      if (!c.isMesh || !c.material) return;
+      var bb = new THREE.Box3().setFromObject(c);
+      var sz = bb.getSize(new THREE.Vector3());
+      _bhInfos.push({ mesh: c, vol: sz.x * sz.y * sz.z });
+    });
+    _bhInfos.sort(function(a, b) { return a.vol - b.vol; });
+    var _eventHorizon = null;
+    for (var _i = 0; _i < _bhInfos.length; _i++) {
+      var _mat = _bhInfos[_i].mesh.material;
+      if (!_mat.transparent && (_mat.opacity === undefined || _mat.opacity >= 0.99)) {
+        _eventHorizon = _bhInfos[_i].mesh;
+        break;
+      }
+    }
+
+    // Shared vertex shader
+    var _bhVert = [
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vUv=uv;',
+      '  gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);',
+      '}'
+    ].join('\n');
+
+    // Luminance-remap fragment: maps texture luminance → dark brown→mid gold→bright warm-white
+    // 10% original texture blended in for subtle nuance without rainbow artefacts
+    var _bhFrag = [
+      'uniform sampler2D map;',
+      'uniform float bhOpacity;',
+      'varying vec2 vUv;',
+      'void main(){',
+      '  vec4 tex=texture2D(map,vUv);',
+      '  float lum=dot(tex.rgb,vec3(0.299,0.587,0.114));',
+      '  vec3 dark  =vec3(0.12,0.07,0.02);',
+      '  vec3 mid   =vec3(0.75,0.48,0.08);',
+      '  vec3 bright=vec3(1.0,0.92,0.75);',
+      '  vec3 remap=lum<0.5?mix(dark,mid,lum*2.0):mix(mid,bright,(lum-0.5)*2.0);',
+      '  vec3 color=mix(remap,tex.rgb*1.5,0.10);',
+      '  gl_FragColor=vec4(color,tex.a*bhOpacity);',
+      '}'
+    ].join('\n');
+
+    // Event horizon: deep brown-black, no texture lookup
+    var _bhHorizFrag = [
+      'void main(){',
+      '  gl_FragColor=vec4(0.02,0.01,0.01,1.0);',
+      '}'
+    ].join('\n');
+
+    // Apply shaders; transparent ring layers get depthTest=false to stop Z-fighting
     bhScene.traverse(function(child) {
       if (!child.isMesh || !child.material) return;
       child.renderOrder = 3;
-      const m = child.material;
-      const isTransparent = m.transparent || (m.opacity !== undefined && m.opacity < 1);
-      if (isTransparent) {
-        m.depthWrite = false;
-        m.depthTest  = false;
+      var origMat  = child.material;
+      var isTransp = origMat.transparent || (origMat.opacity !== undefined && origMat.opacity < 1.0);
+
+      if (child === _eventHorizon) {
+        child.material = new THREE.ShaderMaterial({
+          vertexShader:   _bhVert,
+          fragmentShader: _bhHorizFrag,
+          depthWrite: true,
+          depthTest:  true
+        });
+      } else {
+        var texMap = origMat.map || (function(){
+          var d = new Uint8Array([128,128,128,255]);
+          var t = new THREE.DataTexture(d, 1, 1, THREE.RGBAFormat);
+          t.needsUpdate = true;
+          return t;
+        })();
+        child.material = new THREE.ShaderMaterial({
+          uniforms: {
+            map:       { value: texMap },
+            bhOpacity: { value: origMat.opacity !== undefined ? origMat.opacity : 1.0 }
+          },
+          vertexShader:   _bhVert,
+          fragmentShader: _bhFrag,
+          transparent: isTransp,
+          depthWrite:  !isTransp,
+          depthTest:   !isTransp,
+          side: origMat.side !== undefined ? origMat.side : THREE.FrontSide
+        });
       }
-      m.needsUpdate = true;
     });
+
+    // Tight concentrated bloom: strength 1.0, radius 0.2 — only brightest inner pixels
+    bloomComposer = new THREE.EffectComposer(renderer);
+    bloomComposer.addPass(new THREE.RenderPass(scene, camera));
+    bloomComposer.addPass(new THREE.UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.0,   // strength
+      0.2,   // radius — tight, concentrated
+      0.4    // threshold — only the bright inner ring blooms
+    ));
 
     // Wrapper group spins around world Y; bhScene sits inside with the corrective
     // Z tilt so the ring stays flat in the galaxy plane while rotating.
@@ -2956,8 +3039,8 @@ function animate(){
     ambientLight.intensity = 0;
     sunLight.intensity     = 0;
     scene.environment      = null;
-    renderer.toneMapping         = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMapping         = THREE.LinearToneMapping;
+    renderer.toneMappingExposure = 1.0;
     scene.add(bhLight);
     // Save visibility of every scene object, then hide all except the BH model tree
     _bhSavedVisibility = new Map();
@@ -3265,7 +3348,11 @@ function animate(){
     controls.update();
   }
 
-  renderer.render(scene, camera);
+  if (bhRendererSettings && bloomComposer) {
+    bloomComposer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 animate();
 
