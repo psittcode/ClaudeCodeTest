@@ -1535,6 +1535,8 @@ function transformMars() {
   const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
   function applyTexQuality(tex) {
     tex.anisotropy = maxAnisotropy;
+    tex.wrapS = THREE.RepeatWrapping;      // prevents hard meridian seam on sphere
+    tex.wrapT = THREE.ClampToEdgeWrapping; // clamp at poles is correct
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
@@ -1555,12 +1557,15 @@ function transformMars() {
         // Mars surface — swap in our safe-sized textures
         mat.map = colorTex;
         mat.emissiveMap = emissiveTex;
-        mat.emissive.set(0x111111); // subtle city-lights glow; full [1,1,1] factor is too strong
+        mat.emissive.set(0xffffff); // full white so emissive map drives city-light intensity
+        mat.emissiveIntensity = 1;
         mat.needsUpdate = true;
       } else if (mat.map) {
         // Cloud mesh (transparent + has a texture) — keep GLB texture, just tune quality
         [mat.map].forEach(function(tex) {
           tex.anisotropy = maxAnisotropy;
+          tex.wrapS = THREE.RepeatWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
           tex.minFilter = THREE.LinearMipmapLinearFilter;
           tex.magFilter = THREE.LinearFilter;
           tex.needsUpdate = true;
