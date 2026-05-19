@@ -389,23 +389,24 @@ renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 // Pre-bake a dark warm PMREM environment for the black hole view.
-// PBR specular/glossiness materials need an environment map to produce correct
-// reflections and IBL; without one, Three.js renders them flat.
-// THREE.RoomEnvironment does not exist in r128, so we build a minimal substitute:
-// a scene whose background is near-black and whose BackSide sphere fills every
-// cubemap face with a subtle warm glow — just enough to activate IBL highlights.
-{
+// Wrapped in try/catch — a PMREMGenerator failure at startup must NOT abort the
+// whole script (same pattern as the EffectComposer black-screen incident).
+// If it fails, bhEnvTexture stays null and the animate loop skips environment assignment.
+try {
   const _pmrem = new THREE.PMREMGenerator(renderer);
   _pmrem.compileCubemapShader();
   const _envScene = new THREE.Scene();
-  _envScene.background = new THREE.Color(0x0a0604);           // very dark warm black
+  _envScene.background = new THREE.Color(0x0a0604);
   const _envSphere = new THREE.Mesh(
     new THREE.SphereGeometry(1, 16, 8),
-    new THREE.MeshBasicMaterial({ color: 0x5a1800, side: THREE.BackSide })  // deep warm red-brown
+    new THREE.MeshBasicMaterial({ color: 0x5a1800, side: THREE.BackSide })
   );
   _envScene.add(_envSphere);
   bhEnvTexture = _pmrem.fromScene(_envScene).texture;
   _pmrem.dispose();
+} catch (e) {
+  console.warn('PMREM environment generation failed, BH will render without IBL:', e);
+  bhEnvTexture = null;
 }
 
 // Controls
@@ -2952,7 +2953,7 @@ function animate(){
     bhOrigEnvironment = scene.environment;
     renderer.toneMapping         = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.8;
-    scene.environment            = bhEnvTexture;   // activates IBL for PBR materials
+    if (bhEnvTexture) scene.environment = bhEnvTexture;
     bhRendererSettings = true;
     scene.traverse(function(o) { if (o.isMesh && o.material) o.material.needsUpdate = true; });
   } else if (bhTransitionT <= 0.01 && bhRendererSettings) {
