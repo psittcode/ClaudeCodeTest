@@ -1538,6 +1538,8 @@ function transformMars() {
     tex.anisotropy = maxAnisotropy;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
+    // Shift seam from u=0 (adjacent to city-lights at u≈0.88) to u=0.5 (mid-ocean)
+    tex.offset.x = 0.5;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
     tex.needsUpdate = true;
@@ -1574,7 +1576,9 @@ function transformMars() {
         float blend = smoothstep(-0.15, 0.15, intensity);
         vec4 day   = texture2D(dayTexture,   vUv);
         vec4 night = texture2D(nightTexture, vUv);
-        gl_FragColor = mix(night, day, blend);
+        // Dim ambient so night side isn't pitch black; city lights add on top
+        vec3 darkSide = day.rgb * 0.06 + night.rgb;
+        gl_FragColor = vec4(mix(darkSide, day.rgb, blend), 1.0);
       }
     `
   });
@@ -1613,6 +1617,8 @@ function transformMars() {
           tex.needsUpdate = true;
         });
         marsCloudMesh = child;
+      } else {
+        child.visible = false; // atmosphere mesh — hide to avoid yellow GLB tint
       }
     });
 
