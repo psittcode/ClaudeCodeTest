@@ -388,7 +388,25 @@ renderer.shadowMap.enabled = true;
 
 document.body.appendChild(renderer.domElement);
 
-
+// Pre-bake a dark warm PMREM environment for the black hole view.
+// PBR specular/glossiness materials need an environment map to produce correct
+// reflections and IBL; without one, Three.js renders them flat.
+// THREE.RoomEnvironment does not exist in r128, so we build a minimal substitute:
+// a scene whose background is near-black and whose BackSide sphere fills every
+// cubemap face with a subtle warm glow — just enough to activate IBL highlights.
+{
+  const _pmrem = new THREE.PMREMGenerator(renderer);
+  _pmrem.compileCubemapShader();
+  const _envScene = new THREE.Scene();
+  _envScene.background = new THREE.Color(0x0a0604);           // very dark warm black
+  const _envSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 16, 8),
+    new THREE.MeshBasicMaterial({ color: 0x5a1800, side: THREE.BackSide })  // deep warm red-brown
+  );
+  _envScene.add(_envSphere);
+  bhEnvTexture = _pmrem.fromScene(_envScene).texture;
+  _pmrem.dispose();
+}
 
 // Controls
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -458,11 +476,12 @@ let bhTransitionT       = 0;     // 0 = normal galaxy view, 1 = full black hole 
 let BH_CLOSE_DIST       = 0;     // camera-to-core distance at which transition reaches 100%
 let BH_FAR_DIST         = 0;     // camera-to-core distance at which transition begins
 let bhRendererSettings  = false; // tracks whether BH renderer settings are currently active
-// Saved renderer state — set just before the first BH transition so we restore
-// the exact original values when zooming back out, not hardcoded defaults.
+// Saved renderer / scene state — captured just before the first BH transition
+// so we restore exact original values when zooming back out.
 let bhOrigToneMapping   = null;
 let bhOrigExposure      = null;
-let bhOrigEncoding      = null;
+let bhOrigEnvironment   = null;
+let bhEnvTexture        = null; // PMREM environment for BH PBR rendering (set up after renderer)
 
 // Solar System marker lives in world space at origin (the Sun's actual scene position)
 const solarSystemMarker = new THREE.Group();
@@ -580,28 +599,14 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // Counter-rotating around Z cancels that tilt so the ring lies in the galaxy plane.
     bhScene.rotation.z = -Math.atan2(0.3661, 0.9306); // ≈ -0.375 rad
 
+    // Do not modify any materials — let the GLB's own materials render as-is.
+    // renderOrder 3 ensures the model draws after the galaxy GLB (renderOrder 1).
+    // needsUpdate tells Three.js to recompile shaders with the active renderer
+    // settings (ACES tone mapping, environment) when the BH view activates.
     bhScene.traverse(function(child) {
       if (!child.isMesh || !child.material) return;
-      child.renderOrder = 3;   // render after galaxy GLB (renderOrder 1)
-
-      const mat = child.material;
-      const n   = (mat.name || '').toLowerCase();
-
-      if (n === 'black_hole_center' || n.includes('center') || n.includes('sphere')) {
-        // Event horizon — perfect jet black, no glow at all
-        mat.color.set(0x000000);
-        mat.emissiveIntensity = 0;
-        if (mat.emissive) mat.emissive.set(0x000000);
-      } else if (mat.map) {
-        // All other textured meshes: force the diffuse texture to self-illuminate.
-        // This makes the model's own texture colours display at full raw brightness
-        // independent of scene lighting, bypassing the broken KHR_pbrSpecularGlossiness
-        // shader that produces the rainbow-stripe artefact.
-        mat.emissiveMap       = mat.map;
-        mat.emissive          = new THREE.Color(1, 1, 1);
-        mat.emissiveIntensity = 1.0;
-      }
-      mat.needsUpdate = true;
+      child.renderOrder = 3;
+      child.material.needsUpdate = true;
     });
 
     // Wrapper group spins around world Y; bhScene sits inside with the corrective
@@ -2942,23 +2947,18 @@ function animate(){
   // and restore defaults when it's gone.  Only flip once per boundary crossing so
   // shaders are not rebuilt on every frame.
   if (bhTransitionT > 0.01 && !bhRendererSettings) {
-    // Save the renderer's current state so we can restore it exactly on exit —
-    // avoids hardcoding defaults that might not match what the rest of the app set.
     bhOrigToneMapping = renderer.toneMapping;
     bhOrigExposure    = renderer.toneMappingExposure;
-    bhOrigEncoding    = renderer.outputEncoding;
-    // NoToneMapping lets the model's own emissive textures display at full raw
-    // brightness without any tone-curve interference — the colours you see are
-    // exactly what the texture paints, which is what Sketchfab shows.
-    renderer.toneMapping         = THREE.NoToneMapping;
-    renderer.toneMappingExposure = 1.0;
-    renderer.outputEncoding      = THREE.sRGBEncoding;
+    bhOrigEnvironment = scene.environment;
+    renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.8;
+    scene.environment            = bhEnvTexture;   // activates IBL for PBR materials
     bhRendererSettings = true;
     scene.traverse(function(o) { if (o.isMesh && o.material) o.material.needsUpdate = true; });
   } else if (bhTransitionT <= 0.01 && bhRendererSettings) {
     renderer.toneMapping         = bhOrigToneMapping;
     renderer.toneMappingExposure = bhOrigExposure;
-    renderer.outputEncoding      = bhOrigEncoding;
+    scene.environment            = bhOrigEnvironment;
     bhRendererSettings = false;
     scene.traverse(function(o) { if (o.isMesh && o.material) o.material.needsUpdate = true; });
   }
