@@ -2957,12 +2957,12 @@ function animate(){
     bhOrigExposure    = renderer.toneMappingExposure;
     bhOrigEnvironment = scene.environment;
     renderer.toneMapping         = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.5;
+    renderer.toneMappingExposure = 0.3;
     if (bhEnvTexture) scene.environment = bhEnvTexture;
     if (!bhComposer) {
       const _rp = new THREE.RenderPass(scene, camera);
       const _bp = new THREE.UnrealBloomPass(
-        new THREE.Vector2(innerWidth, innerHeight), 1.5, 0.4, 0.3
+        new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.2, 0.3
       );
       bhComposer = new THREE.EffectComposer(renderer);
       bhComposer.addPass(_rp);
