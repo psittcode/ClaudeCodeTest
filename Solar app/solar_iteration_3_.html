@@ -1530,28 +1530,17 @@ function transformMars() {
   refreshMarsPanel();
   gltfLoader.load("terraformed_mars.glb", function(gltf) {
     if (!marsTransformed) return; // user restored before GLB finished loading
-    let extractedTexture = null;
+    let sourceMesh = null;
     gltf.scene.traverse(function(child) {
-      if (!extractedTexture && child.isMesh && child.material) {
-        extractedTexture = child.material.map
-          || child.material.emissiveMap
-          || child.material.roughnessMap
-          || null;
-      }
+      if (!sourceMesh && child.isMesh) sourceMesh = child;
     });
-    if (!extractedTexture) return;
-    extractedTexture.flipY = false;
-    extractedTexture.encoding = THREE.sRGBEncoding;
-    extractedTexture.needsUpdate = true;
+    if (!sourceMesh) return;
+    const rawMat = Array.isArray(sourceMesh.material) ? sourceMesh.material[0] : sourceMesh.material;
+    const mat = rawMat.clone();
+    mat.vertexColors = false; // sphere has no vertex color data
+    mat.needsUpdate = true;
     const radius = marsMesh.userData.size;
     const geo = new THREE.SphereGeometry(radius, 64, 64);
-    const mat = new THREE.MeshStandardMaterial({
-      map: extractedTexture,
-      color: 0xffffff,
-      metalness: 0,
-      roughness: 1,
-    });
-    mat.needsUpdate = true;
     terraformedMarsModel = new THREE.Mesh(geo, mat);
     marsMesh.material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
     marsMesh.add(terraformedMarsModel);
