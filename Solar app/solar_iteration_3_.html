@@ -589,48 +589,72 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     blackHoleModel.position.copy(galacticCorePos);
     blackHoleModel.visible = false;
 
-    // Replace every mesh material with a known-good MeshBasicMaterial.
-    // Colors are chosen to match what the PBR textures intend.
+    // Replace PBR materials (broken in r128) with MeshBasicMaterial + actual
+    // texture maps loaded from black_hole/textures/.  MeshBasicMaterial.map
+    // renders unlit (= behaves like emissive), which is exactly what we want
+    // for a glowing accretion disk.
+    const bht = new THREE.TextureLoader();
+    const bhTex = {
+      blackDiffuse:  bht.load('black_hole/textures/black_hole_blackoutside_diffuse.png'),
+      light1Emissive: bht.load('black_hole/textures/black_hole_light1_emissive.png'),
+      light2Emissive: bht.load('black_hole/textures/black_hole_light2_emissive.png'),
+      light3Emissive: bht.load('black_hole/textures/black_hole_light3_emissive.png'),
+      ringDiffuse:   bht.load('black_hole/textures/ring_diffuse.png'),
+    };
+
     blackHoleModel.traverse(function(child) {
       if (!child.isMesh) return;
       child.renderOrder = 3;
 
       const n = (child.material && child.material.name) || '';
 
-      if (n === 'Planet') {
-        child.visible = false; // orbiting body far off-centre — skip
-        return;
-      }
-      if (n === 'black_hole_distortion') {
-        child.visible = false; // pure distortion effect — not renderable here
+      if (n === 'Planet' || n === 'black_hole_distortion') {
+        child.visible = false;
         return;
       }
 
       let mat;
-      if (n === 'black_hole_blackoutside' || n === 'black_hole_center') {
+      if (n === 'black_hole_blackoutside') {
+        // Outer shell — textured black with alpha cutout
         mat = new THREE.MeshBasicMaterial({
-          color: 0x000000, depthTest: false, depthWrite: false
+          map: bhTex.blackDiffuse,
+          alphaTest: 0.5,
+          side: THREE.DoubleSide,
+          depthTest: false, depthWrite: false
+        });
+      } else if (n === 'black_hole_center') {
+        mat = new THREE.MeshBasicMaterial({
+          color: 0x000000, transparent: true, opacity: 0.92,
+          depthTest: false, depthWrite: false
         });
       } else if (n === 'black_hole_light1') {
         mat = new THREE.MeshBasicMaterial({
-          color: 0xfff0cc, transparent: true, opacity: 0.95,
-          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false
+          map: bhTex.light1Emissive,
+          transparent: true, opacity: 0.95,
+          blending: THREE.AdditiveBlending,
+          depthTest: false, depthWrite: false
         });
       } else if (n === 'black_hole_light2') {
         mat = new THREE.MeshBasicMaterial({
-          color: 0xff8800, transparent: true, opacity: 0.80,
-          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false
+          map: bhTex.light2Emissive,
+          transparent: true, opacity: 0.85,
+          blending: THREE.AdditiveBlending,
+          depthTest: false, depthWrite: false
         });
       } else if (n === 'black_hole_light3') {
         mat = new THREE.MeshBasicMaterial({
-          color: 0xff4400, transparent: true, opacity: 0.65,
-          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false
+          map: bhTex.light3Emissive,
+          transparent: true, opacity: 0.70,
+          blending: THREE.AdditiveBlending,
+          depthTest: false, depthWrite: false
         });
       } else {
-        // ring / ring2
+        // ring / ring2 — accretion disc diffuse
         mat = new THREE.MeshBasicMaterial({
-          color: 0xff6820, transparent: true, opacity: 0.45,
-          blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false
+          map: bhTex.ringDiffuse,
+          transparent: true, opacity: 0.70,
+          blending: THREE.AdditiveBlending,
+          depthTest: false, depthWrite: false
         });
       }
       child.material = mat;
