@@ -687,7 +687,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     bloomComposer.addPass(new THREE.RenderPass(scene, camera));
     bloomComposer.addPass(new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.0,   // strength
+      0.4,   // strength
       0.2,   // radius — tight, concentrated
       0.4    // threshold — only the bright inner ring blooms
     ));
@@ -3040,7 +3040,7 @@ function animate(){
     sunLight.intensity     = 0;
     scene.environment      = null;
     renderer.toneMapping         = THREE.LinearToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 0.35;
     scene.add(bhLight);
     // Save visibility of every scene object, then hide all except the BH model tree
     _bhSavedVisibility = new Map();
