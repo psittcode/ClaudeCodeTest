@@ -1193,7 +1193,6 @@ Despite the setbacks, the dream endures. Research indicates that complete habita
 let marsTransformed = false;
 let terraformedMarsModel = null;
 let marsCloudMesh = null;
-let terraformedMarsMaterial = null;
 
 // Cloud layer
 const cloudTexture = textureLoader.load("2k_earth_clouds.jpg");
@@ -1538,7 +1537,6 @@ function transformMars() {
     tex.anisotropy = maxAnisotropy;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
-    // Shift seam from u=0 (adjacent to city-lights at u≈0.88) to u=0.5 (mid-ocean)
     tex.offset.x = 0.5;
     tex.minFilter = THREE.LinearMipmapLinearFilter;
     tex.magFilter = THREE.LinearFilter;
@@ -1546,92 +1544,43 @@ function transformMars() {
   }
 
   const colorTex = textureLoader.load("ChatGPT Image May 19, 2026, 09_39_22 PM.png", applyTexQuality);
+  // terraformed_mars_emissive.png is the safe-sized 4096×2048 version of city_lights.png
+  // (city_lights.png extracted from GLB is 8192×4096 and exceeds GPU texture limits)
   const nightTex = textureLoader.load("terraformed_mars_emissive.png", applyTexQuality);
+  const cloudTex = textureLoader.load("clouds.png", applyTexQuality);
 
-  // Use a SphereGeometry for the surface so UV coords are guaranteed 0→1 equirectangular.
-  // The GLB mesh may have UV coordinates that don't span the full texture, causing a cropped look.
-  terraformedMarsMaterial = new THREE.ShaderMaterial({
-    uniforms: {
-      dayTexture:   { value: colorTex },
-      nightTexture: { value: nightTex },
-      sunDirection: { value: new THREE.Vector3(1, 0, 0) }
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      varying vec3 vNormal;
-      void main() {
-        vUv = uv;
-        vNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D dayTexture;
-      uniform sampler2D nightTexture;
-      uniform vec3 sunDirection;
-      varying vec2 vUv;
-      varying vec3 vNormal;
-      void main() {
-        float intensity = dot(vNormal, sunDirection);
-        float blend = smoothstep(-0.15, 0.15, intensity);
-        vec4 day   = texture2D(dayTexture,   vUv);
-        vec4 night = texture2D(nightTexture, vUv);
-        // Dim ambient so night side isn't pitch black; city lights add on top
-        vec3 darkSide = day.rgb * 0.06 + night.rgb;
-        gl_FragColor = vec4(mix(darkSide, day.rgb, blend), 1.0);
-      }
-    `
+  const surfaceMat = new THREE.MeshStandardMaterial({
+    map: colorTex,
+    emissiveMap: nightTex,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 1.0
   });
 
   terraformedMarsModel = new THREE.Group();
-  const surfaceMesh = new THREE.Mesh(
+  terraformedMarsModel.add(new THREE.Mesh(
     new THREE.SphereGeometry(marsRadius, 64, 64),
-    terraformedMarsMaterial
-  );
-  terraformedMarsModel.add(surfaceMesh);
+    surfaceMat
+  ));
 
-  // Load GLB only for atmosphere and cloud layers; hide its surface mesh
-  gltfLoader.load("terraformed_mars.glb", function(gltf) {
-    if (!marsTransformed) return;
-    marsCloudMesh = null;
-    const glbScene = gltf.scene;
-
-    const box = new THREE.Box3().setFromObject(glbScene);
-    const center = box.getCenter(new THREE.Vector3());
-    const maxDim = Math.max(...box.getSize(new THREE.Vector3()).toArray());
-    const glbScale = (marsRadius * 2) / maxDim;
-
-    glbScene.traverse(function(child) {
-      if (!child.isMesh) return;
-      const mat = Array.isArray(child.material) ? child.material[0] : child.material;
-      if (!mat) return;
-      if (!mat.transparent) {
-        child.visible = false; // replaced by our SphereGeometry surface
-      } else if (mat.map) {
-        [mat.map].forEach(function(tex) {
-          tex.anisotropy = maxAnisotropy;
-          tex.wrapS = THREE.RepeatWrapping;
-          tex.wrapT = THREE.ClampToEdgeWrapping;
-          tex.minFilter = THREE.LinearMipmapLinearFilter;
-          tex.magFilter = THREE.LinearFilter;
-          tex.needsUpdate = true;
-        });
-        marsCloudMesh = child;
-      } else {
-        child.visible = false; // atmosphere mesh — hide to avoid yellow GLB tint
-      }
-    });
-
-    glbScene.position.sub(center);
-    glbScene.scale.setScalar(glbScale);
-    if (marsCloudMesh) marsCloudMesh.scale.setScalar(1.02);
-    terraformedMarsModel.add(glbScene);
+  // Cloud layer — RGBA alpha channel drives per-pixel cloud opacity
+  const cloudMat = new THREE.MeshStandardMaterial({
+    map: cloudTex,
+    transparent: true,
+    depthWrite: false
   });
+  marsCloudMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(marsRadius, 64, 64),
+    cloudMat
+  );
+  marsCloudMesh.scale.setScalar(1.02);
+  terraformedMarsModel.add(marsCloudMesh);
 
   scene.add(terraformedMarsModel);
   terraformedMarsModel.position.copy(marsMesh.position);
   terraformedMarsModel.rotation.copy(marsMesh.rotation);
   marsMesh.visible = false;
+
+  console.log("Transformed Mars optimized — GLB file can now be deleted");
 }
 
 function restoreMars() {
@@ -1642,7 +1591,6 @@ function restoreMars() {
     terraformedMarsModel = null;
   }
   marsCloudMesh = null;
-  terraformedMarsMaterial = null;
   marsMesh.visible = true;
   lockedObject = marsMesh; // re-establish camera lock so it doesn't drift to origin
   refreshMarsPanel();
@@ -3127,12 +3075,6 @@ function animate(){
     earthMesh.material.uniforms.sunDirection.value.copy(dir);
   }
 
-  // ☀️ Update Terraformed Mars shader sun direction
-  if (terraformedMarsMaterial) {
-    const marsPos = marsMesh.position.clone();
-    terraformedMarsMaterial.uniforms.sunDirection.value.copy(marsPos.clone().negate().normalize());
-  }
-  
 
   // Lock camera target to selected object (only after fly animation completes)
   if (lockedObject && !isFlyingTo) {
