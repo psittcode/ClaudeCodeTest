@@ -451,6 +451,16 @@ const galaxySkybox = new THREE.Mesh(
 galaxySkybox.visible = false;
 scene.add(galaxySkybox);
 
+// ── Black-hole deep-space skybox ─────────────────────────────────────────────
+// Replaces the Milky Way skybox when the BH view activates. Pure near-black
+// with a faint blue tint so it reads as deep space rather than a void.
+const bhSkybox = new THREE.Mesh(
+  new THREE.SphereGeometry(800000, 32, 32),
+  new THREE.MeshBasicMaterial({ color: 0x020408, side: THREE.BackSide, depthWrite: false })
+);
+bhSkybox.visible = false;
+scene.add(bhSkybox);
+
 // --- Milky Way GLB Model + Solar System Marker ---
 let milkyWayModel = null;
 let beauGaDisc = null;   // BeauGa.png flat disc galaxy
@@ -2922,11 +2932,16 @@ function animate(){
   }
 
   if (BH_CLOSE_DIST > 0) {
-    // Tint galaxy skybox: normal starfield → very dark deep orange at full transition
-    const skyR = 1.0 + (0.06  - 1.0) * bhTransitionT;
-    const skyG = 1.0 + (0.015 - 1.0) * bhTransitionT;
-    const skyB = 1.0 + (0.0   - 1.0) * bhTransitionT;
-    galaxySkybox.material.color.setRGB(skyR, skyG, skyB);
+    // Swap to the dark deep-space skybox when the BH becomes active,
+    // restoring the Milky Way skybox when zooming back out.
+    const bhActive = bhTransitionT > 0.01;
+    if (outsideSkybox) {
+      galaxySkybox.visible = !bhActive;
+      bhSkybox.visible     =  bhActive;
+      if (bhActive) bhSkybox.position.copy(camera.position);
+    } else {
+      bhSkybox.visible = false;
+    }
 
     if (blackHoleModel) {
       blackHoleModel.visible = bhTransitionT > 0.02;
@@ -2948,11 +2963,11 @@ function animate(){
     sunLight.intensity     = 0;
     scene.environment      = null;
     renderer.toneMapping         = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.6;
+    renderer.toneMappingExposure = 1.0;
     if (!bhComposer) {
       const _rp = new THREE.RenderPass(scene, camera);
       const _bp = new THREE.UnrealBloomPass(
-        new THREE.Vector2(innerWidth, innerHeight), 0.15, 0.15, 0.0
+        new THREE.Vector2(innerWidth, innerHeight), 0.8, 0.3, 0.0
       );
       bhComposer = new THREE.EffectComposer(renderer);
       bhComposer.addPass(_rp);
