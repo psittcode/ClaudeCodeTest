@@ -407,6 +407,9 @@ const sunLight = new THREE.PointLight(0xffffff, 1.5);
 sunLight.position.set(0, 0, 0);
 scene.add(sunLight);
 
+// Warm ambient light added only during the black hole view — not in scene by default
+const bhLight = new THREE.AmbientLight(0xc8a050, 1.5);
+
 const textureLoader = new THREE.TextureLoader();
 const jupiterTexture = textureLoader.load("jupiter.jpg");
 const saturnTexture = textureLoader.load("2k_saturn.jpg");
@@ -589,31 +592,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // Counter-rotating around Z cancels that tilt so the ring lies in the galaxy plane.
     bhScene.rotation.z = -Math.atan2(0.3661, 0.9306); // ≈ -0.375 rad
 
-    // Convert BH materials so they render correctly with zero lights/environment:
-    // - Emissive materials keep MeshStandardMaterial (self-glow works without lights)
-    // - Everything else becomes MeshBasicMaterial so the raw texture colour shows
-    //   directly without needing any light source (fixes the grey outer disk).
+    // Assign BH meshes to bloom layer and draw order — do not touch any materials.
     bhScene.traverse(function(child) {
-      if (!child.isMesh || !child.material) return;
+      if (!child.isMesh) return;
       child.layers.set(1);   // bloom layer — only these receive UnrealBloom
       child.renderOrder = 3;
-      const m = child.material;
-      const isEmissive = (m.emissiveMap) || (m.emissiveIntensity > 0);
-      if (isEmissive) {
-        // Keep as MeshStandardMaterial — boost self-glow for the inner rings
-        m.emissiveIntensity = 2.0;
-        m.needsUpdate = true;
-      } else {
-        // Replace with MeshBasicMaterial — renders raw texture, ignores all lighting.
-        // Dark golden-brown color multiplies over texture: red→amber, green→olive-gold.
-        child.material = new THREE.MeshBasicMaterial({
-          map:         m.map         || null,
-          color:       new THREE.Color(0.55, 0.38, 0.12),
-          transparent: m.transparent || false,
-          opacity:     m.opacity     !== undefined ? m.opacity : 1,
-          side:        m.side        !== undefined ? m.side    : THREE.FrontSide
-        });
-      }
     });
 
     // Wrapper group spins around world Y; bhScene sits inside with the corrective
@@ -2966,7 +2949,13 @@ function animate(){
     sunLight.intensity     = 0;
     scene.environment      = null;
     renderer.toneMapping         = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.7;
+    renderer.toneMappingExposure = 0.4;
+    scene.add(bhLight); // warm golden ambient — illuminates outer disk texture without white light
+    // DEBUG: list every scene object so we can identify the grey background mesh
+    console.log('[BH activate] scene object visibility:');
+    scene.traverse(function(o) {
+      console.log('  visible=' + o.visible + '  type=' + o.type + '  name="' + (o.name || '') + '"');
+    });
     if (!bloomComposer) {
       // bloomComposer: camera sees only layer 1 (BH meshes) → bloom → render target
       bloomComposer = new THREE.EffectComposer(renderer);
@@ -3005,6 +2994,7 @@ function animate(){
     bhRendererSettings = true;
     scene.traverse(function(o) { if (o.isMesh && o.material) o.material.needsUpdate = true; });
   } else if (bhTransitionT <= 0.01 && bhRendererSettings) {
+    scene.remove(bhLight);
     ambientLight.intensity = bhOrigAmbientIntensity;
     sunLight.intensity     = bhOrigSunIntensity;
     renderer.toneMapping         = bhOrigToneMapping;
