@@ -566,35 +566,79 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
   blackHoleLight.position.copy(galacticCorePos);
   scene.add(blackHoleLight);
 
-  // Load the black hole GLTF model
-  const bhLoader = new THREE.GLTFLoader();
-  bhLoader.load('black_hole/scene.gltf', function(bhGltf) {
-    blackHoleModel = bhGltf.scene;
-    blackHoleModel.scale.setScalar(galaxyVisualRadius * 0.025);
-    blackHoleModel.position.copy(galacticCorePos);
-    blackHoleModel.visible = false;
+  // Build a custom black hole visual from Three.js primitives.
+  // The GLTF model uses KHR_materials_pbrSpecularGlossiness which renders
+  // incorrectly in r128, and its geometry spans ±1640 native units — at the
+  // scale needed to match the galaxy it would envelop the camera completely.
+  (function() {
+    const r = galaxyVisualRadius * 0.025; // reference radius (~1250 units for a 50k galaxy)
+    const group = new THREE.Group();
+    group.position.copy(galacticCorePos);
 
-    // Force every mesh in the model to render on top of the galaxy geometry.
-    // renderOrder 3 > galaxy's 1; depthTest false means it ignores the depth
-    // buffer written by the galaxy model and always draws through it.
-    blackHoleModel.traverse(function(child) {
-      if (child.isMesh) {
-        child.renderOrder = 3;
-        if (child.material) {
-          const mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach(function(mat) {
-            mat.depthTest  = false;
-            mat.depthWrite = false;
-          });
-        }
-      }
-    });
+    // ── Event horizon — pure black sphere ─────────────────────────────────
+    const horizonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(r * 0.35, 48, 48),
+      new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, depthWrite: false })
+    );
+    horizonMesh.renderOrder = 4;
+    group.add(horizonMesh);
 
-    scene.add(blackHoleModel);
-    console.log('Black hole model loaded, scale =', galaxyVisualRadius * 0.025);
-  }, undefined, function(err) {
-    console.error('Black hole GLB load error:', err);
-  });
+    // ── Photon ring / inner accretion glow — thin, bright white-orange ────
+    const ringInnerMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.5, r * 0.06, 16, 256),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd0a0,
+        transparent: true, opacity: 0.95,
+        blending: THREE.AdditiveBlending,
+        depthTest: false, depthWrite: false
+      })
+    );
+    ringInnerMesh.renderOrder = 3;
+    group.add(ringInnerMesh);
+
+    // ── Mid accretion disc — warm orange ──────────────────────────────────
+    const ringMidMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 0.85, r * 0.18, 16, 256),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6820,
+        transparent: true, opacity: 0.55,
+        blending: THREE.AdditiveBlending,
+        depthTest: false, depthWrite: false
+      })
+    );
+    ringMidMesh.renderOrder = 3;
+    group.add(ringMidMesh);
+
+    // ── Outer disc halo — dim deep orange ─────────────────────────────────
+    const ringOuterMesh = new THREE.Mesh(
+      new THREE.TorusGeometry(r * 1.4, r * 0.35, 16, 256),
+      new THREE.MeshBasicMaterial({
+        color: 0xff3800,
+        transparent: true, opacity: 0.20,
+        blending: THREE.AdditiveBlending,
+        depthTest: false, depthWrite: false
+      })
+    );
+    ringOuterMesh.renderOrder = 3;
+    group.add(ringOuterMesh);
+
+    // ── Gravitational lensing halo — very faint warm sphere ───────────────
+    const lensMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(r * 0.55, 32, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0xff5500,
+        transparent: true, opacity: 0.08,
+        blending: THREE.AdditiveBlending,
+        depthTest: false, depthWrite: false
+      })
+    );
+    lensMesh.renderOrder = 3;
+    group.add(lensMesh);
+
+    group.visible = false;
+    scene.add(group);
+    blackHoleModel = group;
+  })();
 
   console.log('Milky Way GLB loaded successfully');
 }, undefined, function(error) {
@@ -2913,7 +2957,12 @@ function animate(){
 
     if (blackHoleModel) {
       blackHoleModel.visible = bhTransitionT > 0.02;
-      blackHoleModel.rotation.y += 0.003 * deltaScale;
+      // Spin the accretion disc rings (children 1–3) independently around Y
+      if (blackHoleModel.children.length >= 4) {
+        blackHoleModel.children[1].rotation.y += 0.004 * deltaScale;
+        blackHoleModel.children[2].rotation.y -= 0.002 * deltaScale;
+        blackHoleModel.children[3].rotation.y += 0.001 * deltaScale;
+      }
     }
     if (blackHoleLight) {
       blackHoleLight.intensity = bhTransitionT * 4.0;
