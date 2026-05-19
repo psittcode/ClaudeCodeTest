@@ -1530,28 +1530,20 @@ function transformMars() {
   refreshMarsPanel();
   gltfLoader.load("terraformed_mars.glb", function(gltf) {
     if (!marsTransformed) return; // user restored before GLB finished loading
-    // Prefer a mesh that has an albedo texture and is opaque (terrain, not ocean/atmosphere)
-    let sourceMesh = null;
-    gltf.scene.traverse(function(child) {
-      if (!child.isMesh) return;
-      const m = Array.isArray(child.material) ? child.material[0] : child.material;
-      if (!m) return;
-      if (!sourceMesh) sourceMesh = child; // any mesh beats nothing
-      if (m.map && !m.transparent) sourceMesh = child; // prefer opaque + textured
-    });
-    if (!sourceMesh) return;
-    const rawMat = Array.isArray(sourceMesh.material) ? sourceMesh.material[0] : sourceMesh.material;
-    const mat = rawMat.clone();
-    mat.vertexColors = false;
-    mat.transparent = false;
-    mat.opacity = 1;
-    if (mat.map) { mat.map.flipY = false; mat.map.needsUpdate = true; }
-    mat.needsUpdate = true;
-    const radius = marsMesh.userData.size;
-    const geo = new THREE.SphereGeometry(radius, 64, 64);
-    terraformedMarsModel = new THREE.Mesh(geo, mat);
-    marsMesh.material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
-    marsMesh.add(terraformedMarsModel);
+    terraformedMarsModel = gltf.scene;
+    // Center the GLB at its own origin
+    const box = new THREE.Box3().setFromObject(terraformedMarsModel);
+    const center = box.getCenter(new THREE.Vector3());
+    terraformedMarsModel.position.sub(center);
+    // Scale to match Mars's diameter
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    terraformedMarsModel.scale.setScalar((marsMesh.userData.size * 2) / maxDim);
+    // Place in scene at Mars's current world position and rotation
+    scene.add(terraformedMarsModel);
+    terraformedMarsModel.position.copy(marsMesh.position);
+    terraformedMarsModel.rotation.copy(marsMesh.rotation);
+    marsMesh.visible = false;
   });
 }
 
@@ -1559,10 +1551,10 @@ function restoreMars() {
   if (!marsTransformed) return;
   marsTransformed = false;
   if (terraformedMarsModel) {
-    marsMesh.remove(terraformedMarsModel);
+    scene.remove(terraformedMarsModel);
     terraformedMarsModel = null;
   }
-  marsMesh.material = marsOriginalMaterial;
+  marsMesh.visible = true;
   lockedObject = marsMesh; // re-establish camera lock so it doesn't drift to origin
   refreshMarsPanel();
 }
@@ -2815,6 +2807,10 @@ function animate(){
     if (m.userData.name === "Mars") {
       m.rotation.y += 0.01181 * speed * deltaScale;
       m.rotation.z = 25.2 * (Math.PI / 180);
+      if (terraformedMarsModel) {
+        terraformedMarsModel.position.copy(m.position);
+        terraformedMarsModel.rotation.copy(m.rotation);
+      }
     }
     if (m.userData.name === "Jupiter") {
       m.rotation.y += 0.02931 * speed * deltaScale;
