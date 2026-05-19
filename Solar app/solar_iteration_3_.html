@@ -598,7 +598,6 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // whether the source texture is red, green, or white.
     bhScene.traverse(function(child) {
       if (!child.isMesh || !child.material) return;
-      child.layers.set(1);   // bloom layer — only these receive UnrealBloom
       child.renderOrder = 3;
       const m = child.material;
       if (!m.map) return;    // no texture — leave material as-is
@@ -2980,37 +2979,6 @@ function animate(){
     renderer.toneMapping         = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.4;
     scene.add(bhLight);
-    if (!bloomComposer) {
-      // bloomComposer: camera sees only layer 1 (BH meshes) → bloom → render target
-      bloomComposer = new THREE.EffectComposer(renderer);
-      bloomComposer.renderToScreen = false;
-      bloomComposer.addPass(new THREE.RenderPass(scene, camera));
-      bloomComposer.addPass(new THREE.UnrealBloomPass(
-        new THREE.Vector2(innerWidth, innerHeight), 0.20, 0.3, 0.60
-      ));
-      // finalComposer: full scene + additive mix of bloom texture
-      const _mixMat = new THREE.ShaderMaterial({
-        uniforms: {
-          baseTexture:  { value: null },
-          bloomTexture: { value: bloomComposer.renderTarget2.texture }
-        },
-        vertexShader: [
-          'varying vec2 vUv;',
-          'void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}'
-        ].join(''),
-        fragmentShader: [
-          'uniform sampler2D baseTexture;',
-          'uniform sampler2D bloomTexture;',
-          'varying vec2 vUv;',
-          'void main(){gl_FragColor=texture2D(baseTexture,vUv)+texture2D(bloomTexture,vUv);}'
-        ].join('')
-      });
-      const _fsp = new THREE.ShaderPass(_mixMat, 'baseTexture');
-      _fsp.needsSwap = true;
-      finalComposer = new THREE.EffectComposer(renderer);
-      finalComposer.addPass(new THREE.RenderPass(scene, camera));
-      finalComposer.addPass(_fsp);
-    }
     // Save visibility of every scene object, then hide all except the BH model tree
     _bhSavedVisibility = new Map();
     const _bhTree = new Set();
@@ -3317,16 +3285,7 @@ function animate(){
     controls.update();
   }
 
-  if (bhRendererSettings && bloomComposer && finalComposer) {
-    // Bloom pass: restrict camera to layer 1 so only BH meshes contribute to bloom
-    camera.layers.set(1);
-    bloomComposer.render();
-    // Final pass: full scene with bloom additively blended in
-    camera.layers.enableAll();
-    finalComposer.render();
-  } else {
-    renderer.render(scene, camera);
-  }
+  renderer.render(scene, camera);
 }
 animate();
 
