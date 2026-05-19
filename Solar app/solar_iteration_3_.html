@@ -370,11 +370,6 @@ Speed<br>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/loaders/GLTFLoader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/shaders/LuminosityHighPassShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/shaders/CopyShader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/postprocessing/EffectComposer.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/postprocessing/RenderPass.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/postprocessing/UnrealBloomPass.js"></script>
 
 <script>
 const scene = new THREE.Scene();
@@ -392,33 +387,6 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 
 document.body.appendChild(renderer.domElement);
-
-// Bloom post-processing — wrapped in try/catch so a CDN load failure or
-// missing THREE.EffectComposer/RenderPass/UnrealBloomPass (e.g. 404, namespace
-// mismatch) does NOT kill the script and black out the whole app.
-// When bloom is unavailable the animate loop falls back to renderer.render().
-let bloomPass = null;
-let bloomComposer = null;
-try {
-  if (THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass) {
-    const _bloomRenderPass = new THREE.RenderPass(scene, camera);
-    bloomPass = new THREE.UnrealBloomPass(
-      new THREE.Vector2(innerWidth, innerHeight),
-      0,    // strength — ramps up in animate loop
-      0.8,  // radius
-      0.1   // threshold
-    );
-    bloomComposer = new THREE.EffectComposer(renderer);
-    bloomComposer.addPass(_bloomRenderPass);
-    bloomComposer.addPass(bloomPass);
-  } else {
-    console.warn('Three.js post-processing not available — bloom disabled');
-  }
-} catch (e) {
-  console.warn('Bloom composer init failed, falling back to direct render:', e);
-  bloomPass = null;
-  bloomComposer = null;
-}
 
 
 
@@ -485,11 +453,11 @@ let galacticCorePos = null;   // world-space position of the galactic centre (se
 let galaxyVisualRadius = 0;   // half the galaxy's XZ extent in scene units
 
 // Black hole galactic-core transition
-let blackHoleModel = null;
-let blackHoleLight = null;
-let bhTransitionT  = 0;   // 0 = normal galaxy view, 1 = full black hole environment
-let BH_CLOSE_DIST  = 0;   // camera-to-core distance at which transition reaches 100%
-let BH_FAR_DIST    = 0;   // camera-to-core distance at which transition begins
+let blackHoleModel      = null;
+let bhTransitionT       = 0;     // 0 = normal galaxy view, 1 = full black hole environment
+let BH_CLOSE_DIST       = 0;     // camera-to-core distance at which transition reaches 100%
+let BH_FAR_DIST         = 0;     // camera-to-core distance at which transition begins
+let bhRendererSettings  = false; // tracks whether BH renderer settings are currently active
 
 // Solar System marker lives in world space at origin (the Sun's actual scene position)
 const solarSystemMarker = new THREE.Group();
@@ -592,19 +560,6 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
   BH_CLOSE_DIST = galaxyVisualRadius * 0.10;
   BH_FAR_DIST   = galaxyVisualRadius * 0.32;
 
-  // Accretion disk lighting — starts dark, intensifies during transition
-  blackHoleLight = new THREE.PointLight(0xff6820, 0, galaxyVisualRadius * 0.5);
-  blackHoleLight.position.copy(galacticCorePos);
-  scene.add(blackHoleLight);
-
-  // Load the black hole GLTF model.
-  // Two fixes vs earlier attempts:
-  //   1. Scale is derived from the model's own bounding box so the ring is never
-  //      larger than the camera distance (previous attempt used galaxyVisualRadius*0.025
-  //      which made the ring ±2M units — camera was inside it).
-  //   2. Materials are replaced post-load with MeshBasicMaterial because
-  //      KHR_materials_pbrSpecularGlossiness renders as a blue glow in r128.
-  //      Geometry is kept intact; only shading is swapped.
   const bhLoader = new THREE.GLTFLoader();
   bhLoader.load('black_hole/scene.gltf', function(bhGltf) {
     const bhScene = bhGltf.scene;
@@ -616,164 +571,26 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     const targetRadius    = galaxyVisualRadius * 0.04;
     bhScene.scale.setScalar(targetRadius / bhNaturalRadius);
 
-    // The GLTF Sketchfab_model root matrix tilts the ring ~21.5° from horizontal
-    // (ring normal lands at (-0.3661, 0.9306, 0) in world space instead of (0,1,0)).
-    // Counter-rotating the loaded scene by the same angle around Z flattens it back
-    // into the galaxy plane without touching the mesh data.
+    // The GLTF Sketchfab_model root matrix tilts the ring ~21.5° from horizontal.
+    // Counter-rotating around Z cancels that tilt so the ring lies in the galaxy plane.
     bhScene.rotation.z = -Math.atan2(0.3661, 0.9306); // ≈ -0.375 rad
 
-    const bht = new THREE.TextureLoader();
-    const bhTex = {
-      blackDiffuse:   bht.load('black_hole/textures/black_hole_blackoutside_diffuse.png'),
-      light1Emissive: bht.load('black_hole/textures/black_hole_light1_emissive.png'),
-      light2Emissive: bht.load('black_hole/textures/black_hole_light2_emissive.png'),
-      light3Emissive: bht.load('black_hole/textures/black_hole_light3_emissive.png'),
-      ringDiffuse:    bht.load('black_hole/textures/ring_diffuse.png'),
-    };
-
+    // Touch needsUpdate so materials rebuild with whatever renderer settings
+    // are active (ACES tone-mapping, sRGB encoding) once the BH becomes visible.
     bhScene.traverse(function(child) {
       if (!child.isMesh) return;
-      child.renderOrder = 3;
-
-      const n = (child.material && child.material.name) || '';
-
-      if (n === 'Planet' || n === 'black_hole_distortion') {
-        child.visible = false;
-        return;
-      }
-
-      let mat;
-      if (n === 'black_hole_blackoutside') {
-        // roughness 0.91 (= 1 - glossiness 0.09), specular ~0.2 gray from GLTF
-        mat = new THREE.MeshStandardMaterial({
-          map: bhTex.blackDiffuse,
-          color: 0xffffff,
-          roughness: 0.91, metalness: 0.2,
-          alphaTest: 0.79,
-          side: THREE.DoubleSide,
-          depthTest: false, depthWrite: false
-        });
-      } else if (n === 'black_hole_center') {
-        mat = new THREE.MeshBasicMaterial({
-          color: 0x000000,
-          transparent: true, opacity: 0.888,
-          depthTest: false, depthWrite: false
-        });
-      } else if (n === 'black_hole_light1') {
-        // Innermost glow — blue-white like a photon sphere / Hawking radiation corona
-        mat = new THREE.MeshStandardMaterial({
-          color: 0x000000,
-          emissive: 0xd0eeff,
-          emissiveMap: bhTex.light1Emissive,
-          emissiveIntensity: 4.0,
-          roughness: 1.0, metalness: 0.0,
-          depthTest: false, depthWrite: false
-        });
-      } else if (n === 'black_hole_light2') {
-        mat = new THREE.MeshStandardMaterial({
-          color: 0x000000,
-          emissive: 0xffffff,
-          emissiveMap: bhTex.light2Emissive,
-          emissiveIntensity: 1.5,
-          roughness: 1.0, metalness: 0.0,
-          depthTest: false, depthWrite: false
-        });
-      } else if (n === 'black_hole_light3') {
-        mat = new THREE.MeshStandardMaterial({
-          color: 0x000000,
-          emissive: 0xffffff,
-          emissiveMap: bhTex.light3Emissive,
-          emissiveIntensity: 0.5,
-          roughness: 1.0, metalness: 0.0,
-          depthTest: false, depthWrite: false
-        });
-      } else if (n === 'ring') {
-        // High emissiveIntensity so bloom makes the ring glow fiercely.
-        // color:white renders texture at full brightness.
-        mat = new THREE.MeshStandardMaterial({
-          map: bhTex.ringDiffuse,
-          color: 0xffffff,
-          emissive: 0xff8040,
-          emissiveMap: bhTex.ringDiffuse,
-          emissiveIntensity: 8.0,
-          roughness: 0.8, metalness: 0.3,
-          transparent: true, opacity: 1.0,
-          side: THREE.DoubleSide,
-          depthTest: false, depthWrite: false
-        });
-      } else if (n === 'ring2') {
-        // GLTF: glossiness=1.0 → roughness=0.0 (mirror), opacity=0.2
-        mat = new THREE.MeshStandardMaterial({
-          map: bhTex.ringDiffuse,
-          color: 0xffffff,
-          emissive: 0xff8040,
-          emissiveMap: bhTex.ringDiffuse,
-          emissiveIntensity: 3.0,
-          roughness: 0.0, metalness: 0.7,
-          transparent: true, opacity: 0.2,
-          side: THREE.DoubleSide,
-          depthTest: false, depthWrite: false
-        });
-      } else {
-        mat = new THREE.MeshBasicMaterial({
-          color: 0xff6820, transparent: true, opacity: 0.3,
-          depthTest: false, depthWrite: false
-        });
-      }
-      child.material = mat;
+      child.renderOrder = 3;   // render after galaxy GLB (renderOrder 1)
+      if (child.material) child.material.needsUpdate = true;
     });
 
-    // Wrap in a spin group. Spinning the wrapper around its local Y (= world Y,
-    // since the wrapper has no tilt) keeps the ring flat while it rotates.
-    // The corrective rotation.z sits only on bhScene inside the wrapper.
+    // Wrapper group spins around world Y; bhScene sits inside with the corrective
+    // Z tilt so the ring stays flat in the galaxy plane while rotating.
     const bhSpin = new THREE.Group();
     bhSpin.position.copy(galacticCorePos);
     bhSpin.visible = false;
     bhSpin.add(bhScene);
-
-    // ── Photon ring ──────────────────────────────────────────────────────────
-    // Thin blue-white halo at the innermost stable orbit (photon sphere).
-    // emissiveIntensity 12 makes it the brightest pixel in the scene;
-    // bloom spreads it into the crisp ring visible in the original.
-    const photonGeo = new THREE.RingGeometry(targetRadius * 0.28, targetRadius * 0.33, 128);
-    const photonMat = new THREE.MeshStandardMaterial({
-      color: 0x000000,
-      emissive: 0xc0e8ff,
-      emissiveIntensity: 12.0,
-      roughness: 1.0, metalness: 0.0,
-      side: THREE.DoubleSide,
-      depthTest: false, depthWrite: false
-    });
-    const photonRingMesh = new THREE.Mesh(photonGeo, photonMat);
-    photonRingMesh.rotation.x = -Math.PI / 2;  // XY → XZ (world-horizontal)
-    photonRingMesh.renderOrder = 4;
-    bhSpin.add(photonRingMesh);
-
-    // ── Gravitational lensing reflection ─────────────────────────────────────
-    // Light from the far side of the accretion disk bends around the black hole
-    // and appears as a mirror image beneath it.  A flipped ring mesh at a small
-    // Y offset simulates this without a ray-march shader.
-    const lensGeo = new THREE.RingGeometry(targetRadius * 0.30, targetRadius * 0.95, 128);
-    const lensMat = new THREE.MeshStandardMaterial({
-      map: bhTex.ringDiffuse,
-      color: 0xffffff,
-      emissive: 0xff8040,
-      emissiveMap: bhTex.ringDiffuse,
-      emissiveIntensity: 5.0,
-      roughness: 0.8, metalness: 0.3,
-      transparent: true, opacity: 0.45,
-      side: THREE.DoubleSide,
-      depthTest: false, depthWrite: false
-    });
-    const lensRingMesh = new THREE.Mesh(lensGeo, lensMat);
-    lensRingMesh.rotation.x = Math.PI / 2;       // face downward (mirrored orientation)
-    lensRingMesh.position.y = -targetRadius * 0.12;
-    lensRingMesh.renderOrder = 4;
-    bhSpin.add(lensRingMesh);
-
     scene.add(bhSpin);
 
-    // Point the global at the wrapper so the animate loop controls spin/visibility
     blackHoleModel = bhSpin;
   }, undefined, function(err) {
     console.error('Black hole GLB load error:', err);
@@ -3098,13 +2915,24 @@ function animate(){
       blackHoleModel.visible = bhTransitionT > 0.02;
       blackHoleModel.rotation.y += 0.0015 * deltaScale;
     }
-    if (blackHoleLight) {
-      blackHoleLight.intensity = bhTransitionT * 25.0;
-    }
   }
-  // Bloom strength tracks the black hole transition so it only fires when the
-  // black hole is actually visible.  At bhTransitionT=1 it reaches full 3.0.
-  if (bloomPass) bloomPass.strength = 3.0 * bhTransitionT;
+
+  // Switch renderer to BH-optimised settings when the black hole becomes visible,
+  // and restore defaults when it's gone.  Only flip once per boundary crossing so
+  // shaders are not rebuilt on every frame.
+  if (bhTransitionT > 0.01 && !bhRendererSettings) {
+    renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.5;
+    renderer.outputEncoding      = THREE.sRGBEncoding;
+    bhRendererSettings = true;
+    scene.traverse(function(o) { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+  } else if (bhTransitionT <= 0.01 && bhRendererSettings) {
+    renderer.toneMapping         = THREE.NoToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.outputEncoding      = THREE.LinearEncoding;
+    bhRendererSettings = false;
+    scene.traverse(function(o) { if (o.isMesh && o.material) o.material.needsUpdate = true; });
+  }
   // ── End black hole transition ─────────────────────────────────────────────
 
   // Advance simulation clock — at 1× real life, advances by real elapsed ms
@@ -3386,11 +3214,7 @@ function animate(){
     controls.update();
   }
 
-  if (bloomComposer) {
-    bloomComposer.render();
-  } else {
-    renderer.render(scene, camera);
-  }
+  renderer.render(scene, camera);
 }
 animate();
 
@@ -3496,7 +3320,6 @@ window.addEventListener("resize", ()=>{
     keplerCamera.updateProjectionMatrix();
   }
   renderer.setSize(innerWidth, innerHeight);
-  if (bloomComposer) bloomComposer.setSize(innerWidth, innerHeight);
 });
 </script>
 
