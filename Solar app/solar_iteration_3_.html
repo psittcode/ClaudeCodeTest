@@ -3351,6 +3351,7 @@ function animate(){
   }
 
   if (bhRendererSettings && bloomComposer) {
+    camera.layers.enableAll();
     bloomComposer.render();
   } else {
     renderer.render(scene, camera);
