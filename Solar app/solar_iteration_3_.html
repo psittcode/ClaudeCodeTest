@@ -595,8 +595,18 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // values that Three.js r128 does not support natively.
     // Emissive textures are grey/greenish — null them out on light meshes so our warm
     // Color is applied purely.  ring/blackoutside keep their map (defines the disc shape).
-    // Center becomes MeshBasicMaterial black so ambient light can't grey it out.
-    // ring2 check must come before ring (ring2 name contains "ring").
+    // PointLight at disc level (outside sphere) gives ring2 particles specular glitter
+    // as camera orbits — placed BH_CLOSE_DIST*0.18 from core so it is outside the sphere.
+    if (!bhPointLight) {
+      bhPointLight = new THREE.PointLight(0xff8830, 2.0, BH_CLOSE_DIST * 0.9, 2);
+      bhPointLight.position.set(
+        galacticCorePos.x,
+        galacticCorePos.y,
+        galacticCorePos.z + BH_CLOSE_DIST * 0.18
+      );
+      scene.add(bhPointLight);
+    }
+
     bhScene.traverse(function(child) {
       if (!child.isMesh || !child.material) return;
       child.material.depthWrite = false;
@@ -620,10 +630,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         child.material.emissiveIntensity = 0.38;
         child.layers.set(1);
       } else if (n.includes('ring2')) {
+        // Keep original GLTF material (glossiness=1.0, specular=0.6) so the disc-level
+        // PointLight creates specular glitter as camera orbits. Just add subtle emissive glow.
         child.renderOrder = 3;
-        child.material.emissiveMap       = null;
         child.material.emissive          = new THREE.Color(0.8, 0.42, 0.04);
-        child.material.emissiveIntensity = 0.15;
+        child.material.emissiveIntensity = 0.12;
         child.layers.set(1);
       } else if (n.includes('ring')) {
         child.renderOrder = 3;
@@ -638,9 +649,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         child.material.emissiveIntensity = 0.28;
         child.layers.set(1);
       } else if (n.includes('center')) {
-        // Fresnel shader: dark face-on (top of dome), warm amber rim at grazing angles.
-        // This replicates the original's "dark glass dome with glowing equatorial rim"
-        // without needing any light sources.
+        // Fresnel: dark face-on (dome top), subtle warm rim at grazing angles only
         child.renderOrder = 5;
         child.material = new THREE.ShaderMaterial({
           uniforms: {},
@@ -658,10 +667,10 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
             'varying vec3 vNormal;',
             'varying vec3 vViewPos;',
             'void main(){',
-            '  float nDotV  = abs(dot(normalize(vNormal), normalize(vViewPos)));',
-            '  float fresnel = pow(1.0 - nDotV, 2.5);',
-            '  vec3 dark = vec3(0.018, 0.008, 0.002);',
-            '  vec3 rim  = vec3(0.55, 0.28, 0.06);',
+            '  float nDotV   = abs(dot(normalize(vNormal), normalize(vViewPos)));',
+            '  float fresnel = pow(1.0 - nDotV, 3.5);',
+            '  vec3 dark = vec3(0.015, 0.006, 0.001);',
+            '  vec3 rim  = vec3(0.28, 0.14, 0.03);',
             '  vec3 col  = mix(dark, rim, fresnel);',
             '  gl_FragColor = vec4(col, 0.97);',
             '}'
@@ -684,9 +693,9 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     bloomComposer.addPass(new THREE.RenderPass(scene, camera));
     bloomComposer.addPass(new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.4,   // strength — kept low so glow doesn't flood the center
-      0.25,  // radius — tight spread, preserves the gradient falloff
-      0.05   // threshold
+      0.35,  // strength
+      0.12,  // radius — very tight so bloom stays at disc level, not flooding sphere top
+      0.08   // threshold
     ));
 
     // finalComposer: full scene + additive bloom blend
