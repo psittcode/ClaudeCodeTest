@@ -677,9 +677,9 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     bloomComposer.addPass(new THREE.RenderPass(scene, camera));
     bloomComposer.addPass(new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.8,   // strength
-      0.12,  // radius
-      0.2    // threshold
+      0.35,  // strength
+      0.08,  // radius
+      0.25   // threshold
     ));
 
     // finalComposer: full scene + additive bloom blend
@@ -3046,8 +3046,13 @@ function animate(){
     bhOrigToneMapping    = renderer.toneMapping;
     bhOrigExposure       = renderer.toneMappingExposure;
     bhOrigOutputEncoding = renderer.outputEncoding;
+    var _bp = bloomComposer && bloomComposer.passes[1];
+    console.log('[BH enter] toneMappingExposure:', renderer.toneMappingExposure,
+      '| bloom strength:', _bp ? _bp.strength : 'n/a',
+      '| bloom radius:',   _bp ? _bp.radius   : 'n/a',
+      '| bloom threshold:',_bp ? _bp.threshold : 'n/a');
     renderer.toneMapping         = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.38;
+    renderer.toneMappingExposure = 0.25;
     renderer.outputEncoding      = THREE.sRGBEncoding;
     _bhSavedVisibility = new Map();
     const _bhTree = new Set();
