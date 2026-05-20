@@ -598,53 +598,57 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // ring2 check must come before ring (ring2 name contains "ring").
     bhScene.traverse(function(child) {
       if (!child.isMesh || !child.material) return;
-      child.renderOrder = 3;
       child.material.depthWrite = false;
       var n = child.name;
       if (n.includes('light1')) {
-        // Null the greenish emissive map; pure warm Color drives the hue
+        child.renderOrder = 3;
         child.material.emissiveMap       = null;
-        child.material.emissive          = new THREE.Color(1.0, 0.80, 0.35);
-        child.material.emissiveIntensity = 2.5;
-        child.layers.set(1);
-      } else if (n.includes('light2')) {
-        child.material.emissiveMap       = null;
-        child.material.emissive          = new THREE.Color(1.0, 0.65, 0.12);
-        child.material.emissiveIntensity = 1.5;
-        child.layers.set(1);
-      } else if (n.includes('light3')) {
-        child.material.emissiveMap       = null;
-        child.material.emissive          = new THREE.Color(0.9, 0.50, 0.05);
-        child.material.emissiveIntensity = 0.8;
-        child.layers.set(1);
-      } else if (n.includes('ring2')) {
-        child.material.emissiveMap       = null;
-        child.material.emissive          = new THREE.Color(0.8, 0.45, 0.05);
-        child.material.emissiveIntensity = 0.35;
-        child.layers.set(1);
-      } else if (n.includes('ring')) {
-        // ring_diffuse.png is grey (avg 164,164,163) — use as luminance mask, warm amber tint
-        if (child.material.map) child.material.emissiveMap = child.material.map;
-        child.material.emissive          = new THREE.Color(1.0, 0.70, 0.20);
+        child.material.emissive          = new THREE.Color(1.0, 0.78, 0.32);
         child.material.emissiveIntensity = 1.0;
         child.layers.set(1);
-      } else if (n.includes('blackoutside')) {
-        // greyscale mask disc — tint deep amber for the outer golden rings
+      } else if (n.includes('light2')) {
+        child.renderOrder = 3;
+        child.material.emissiveMap       = null;
+        child.material.emissive          = new THREE.Color(1.0, 0.60, 0.10);
+        child.material.emissiveIntensity = 0.65;
+        child.layers.set(1);
+      } else if (n.includes('light3')) {
+        child.renderOrder = 3;
+        child.material.emissiveMap       = null;
+        child.material.emissive          = new THREE.Color(0.9, 0.48, 0.05);
+        child.material.emissiveIntensity = 0.4;
+        child.layers.set(1);
+      } else if (n.includes('ring2')) {
+        child.renderOrder = 3;
+        child.material.emissiveMap       = null;
+        child.material.emissive          = new THREE.Color(0.8, 0.45, 0.05);
+        child.material.emissiveIntensity = 0.2;
+        child.layers.set(1);
+      } else if (n.includes('ring')) {
+        child.renderOrder = 3;
         if (child.material.map) child.material.emissiveMap = child.material.map;
-        child.material.emissive          = new THREE.Color(0.65, 0.38, 0.04);
+        child.material.emissive          = new THREE.Color(1.0, 0.68, 0.18);
         child.material.emissiveIntensity = 0.7;
         child.layers.set(1);
+      } else if (n.includes('blackoutside')) {
+        child.renderOrder = 3;
+        if (child.material.map) child.material.emissiveMap = child.material.map;
+        child.material.emissive          = new THREE.Color(0.65, 0.36, 0.04);
+        child.material.emissiveIntensity = 0.55;
+        child.layers.set(1);
       } else if (n.includes('center')) {
-        // Replace with MeshBasicMaterial so ambient light can't lighten it to grey
+        // Higher renderOrder = draws last, always on top of the glow rings
+        child.renderOrder = 5;
         child.material = new THREE.MeshBasicMaterial({
           color:       0x000000,
           transparent: true,
-          opacity:     0.92,
+          opacity:     0.96,
           depthWrite:  false,
           side:        THREE.FrontSide
         });
         child.layers.set(0);
       } else {
+        child.renderOrder = 3;
         child.layers.set(0);
       }
       child.material.needsUpdate = true;
@@ -656,9 +660,9 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     bloomComposer.addPass(new THREE.RenderPass(scene, camera));
     bloomComposer.addPass(new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.6,   // strength
-      0.4,   // radius
-      0.05   // threshold — low so ring glow is captured
+      0.4,   // strength — kept low so glow doesn't flood the center
+      0.25,  // radius — tight spread, preserves the gradient falloff
+      0.05   // threshold
     ));
 
     // finalComposer: full scene + additive bloom blend
