@@ -733,8 +733,8 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     bloomComposer.addPass(new THREE.RenderPass(scene, camera));
     bloomComposer.addPass(new THREE.UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.45,  // strength
-      0.14,  // radius — tighter so adjacent rings don't bleed together
+      0.20,  // strength — low so bloom doesn't fill dark gaps between rings
+      0.10,  // radius — very tight, only immediate edge of each ring glows
       0.35   // threshold — sphere below this, rings above it
     ));
 
