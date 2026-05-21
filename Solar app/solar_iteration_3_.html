@@ -634,86 +634,63 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       if (!child.isMesh || !child.material) return;
       child.material.depthWrite = false;
       var n = child.name;
-      if (n.includes('light1') || n.includes('light2') || n.includes('light3')) {
-        // Luminance-mask ShaderMaterial with TRANSPARENCY:
-        // - Extract luminance from texture → apply pow() for contrast sharpening
-        //   so only truly bright ring areas glow (dark gaps stay fully transparent)
-        // - Alpha channel = sharpened luminance so the disc geometry is transparent
-        //   everywhere the texture is dark, creating visible distinct ring bands
-        // - Color gradient: white-yellow innermost → orange → dark amber outward
-        var emTex = child.material.emissiveMap || child.material.map || null;
-        // light1 = warm ivory-white (high R, lower G to kill yellow), light2 = true orange,
-        // light3 = deep amber — all shifted redder/darker to remove yellow-green cast
-        // light1 = near-white cream (reference inner ring is almost overexposed white)
-        // light2 = warm champagne-gold (not orange)
-        // light3 = deep amber-gold (not saturated orange)
-        // Shift R:G ratio away from yellow (1:1) toward warm ivory/amber:
-        // light1 = warm ivory (R dominates G by ~15%), light2 = amber, light3 = deep amber
-        // Aggressive R>>G to escape yellow: R:G ratios 1.25:1 / 1.76:1 / 2.14:1
-        var warmCol = n.includes('light1') ? new THREE.Color(1.0, 0.80, 0.48)
-                    : n.includes('light2') ? new THREE.Color(0.88, 0.50, 0.14)
-                    :                        new THREE.Color(0.75, 0.35, 0.06);
-        var intens  = n.includes('light1') ? 1.40
-                    : n.includes('light2') ? 0.80
-                    :                        0.45;
-        // Power: higher = sharper ring edges, less bleed into dark areas
-        var lumPow  = n.includes('light1') ? 1.6 : 1.4;
-        child.renderOrder = 3;
-        child.material = new THREE.ShaderMaterial({
+      // Helper: build luminance-mask ShaderMaterial for any ring mesh
+      var _makeLumMat = function(tex, col, intensity, lumPow, additive) {
+        return new THREE.ShaderMaterial({
           uniforms: {
-            tEmissive: { value: emTex },
-            uColor:    { value: warmCol },
-            uIntensity:{ value: intens },
+            tEmissive: { value: tex },
+            uColor:    { value: col },
+            uIntensity:{ value: intensity },
             uLumPow:   { value: lumPow },
-            uHasMap:   { value: emTex ? 1.0 : 0.0 }
+            uHasMap:   { value: tex ? 1.0 : 0.0 }
           },
-          vertexShader: [
-            'varying vec2 vUv;',
-            'void main(){',
-            '  vUv = uv;',
-            '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);',
-            '}'
-          ].join('\n'),
+          vertexShader: 'varying vec2 vUv;\nvoid main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
           fragmentShader: [
-            'uniform sampler2D tEmissive;',
-            'uniform vec3 uColor;',
-            'uniform float uIntensity;',
-            'uniform float uLumPow;',
-            'uniform float uHasMap;',
-            'varying vec2 vUv;',
+            'uniform sampler2D tEmissive; uniform vec3 uColor;',
+            'uniform float uIntensity, uLumPow, uHasMap; varying vec2 vUv;',
             'void main(){',
             '  float lum = 1.0;',
-            '  if(uHasMap > 0.5){',
-            '    vec3 t = texture2D(tEmissive, vUv).rgb;',
-            '    lum = dot(t, vec3(0.299, 0.587, 0.114));',
-            '    lum = pow(lum, uLumPow);', // sharpen: dark gaps → truly transparent
-            '  }',
-            '  float a = clamp(lum * uIntensity, 0.0, 1.0);',
-            '  gl_FragColor = vec4(uColor * lum * uIntensity, a);',
+            '  if(uHasMap > 0.5){ vec3 t = texture2D(tEmissive,vUv).rgb; lum = pow(dot(t,vec3(0.299,0.587,0.114)), uLumPow); }',
+            '  float a = clamp(lum*uIntensity, 0.0, 1.0);',
+            '  gl_FragColor = vec4(uColor*lum*uIntensity, a);',
             '}'
           ].join('\n'),
           transparent: true,
           depthWrite:  false,
-          blending:    THREE.AdditiveBlending,
+          blending:    additive ? THREE.AdditiveBlending : THREE.NormalBlending,
           side: THREE.DoubleSide
         });
+      };
+
+      if (n.includes('light1') || n.includes('light2') || n.includes('light3')) {
+        // Reference: inner ring = near-white (overexposed), stepping out through cream → golden
+        var emTex   = child.material.emissiveMap || child.material.map || null;
+        var ringCol = n.includes('light1') ? new THREE.Color(1.0, 0.96, 0.88)   // near-white
+                    : n.includes('light2') ? new THREE.Color(1.0, 0.82, 0.55)   // warm cream
+                    :                        new THREE.Color(0.92, 0.62, 0.22);  // golden amber
+        var intens  = n.includes('light1') ? 1.65
+                    : n.includes('light2') ? 0.90
+                    :                        0.50;
+        var lumPow  = n.includes('light1') ? 1.6 : 1.4;
+        child.renderOrder = 3;
+        child.material = _makeLumMat(emTex, ringCol, intens, lumPow, true);
         child.layers.set(1);
       } else if (n.includes('ring2')) {
         child.renderOrder = 3;
-        child.material.emissive          = new THREE.Color(0.72, 0.38, 0.06);
-        child.material.emissiveIntensity = 0.12;
+        child.material.emissive          = new THREE.Color(0.65, 0.35, 0.08);
+        child.material.emissiveIntensity = 0.10;
         child.layers.set(1);
       } else if (n.includes('ring')) {
+        // Restore texture detail via luminance mask with warm-neutral color — no yellow bleed
+        var rTex = child.material.map || null;
         child.renderOrder = 3;
-        child.material.emissiveMap = null;  // null baked-in yellow texture
-        child.material.emissive          = new THREE.Color(0.65, 0.40, 0.12);  // amber-brown
-        child.material.emissiveIntensity = 0.22;
+        child.material = _makeLumMat(rTex, new THREE.Color(1.0, 0.88, 0.65), 0.28, 1.2, true);
         child.layers.set(1);
       } else if (n.includes('blackoutside')) {
+        var boTex = child.material.map || null;
         child.renderOrder = 3;
-        child.material.emissiveMap = null;  // null baked-in yellow texture
-        child.material.emissive          = new THREE.Color(0.36, 0.17, 0.04);  // dark brown
-        child.material.emissiveIntensity = 0.16;
+        child.material = _makeLumMat(boTex, new THREE.Color(0.55, 0.28, 0.07), 0.18, 1.2, true);
+        child.layers.set(1);
         child.layers.set(1);
       } else if (n.includes('center')) {
         // Sphere renders LAST (renderOrder:10) so it paints over ring additive blending
