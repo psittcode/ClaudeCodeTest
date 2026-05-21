@@ -668,11 +668,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         // light2: salmon-pink (matches reference bright inner band color)
         // light3: orange-gold transition band
         var ringCol = n.includes('light1') ? new THREE.Color(1.00, 1.00, 1.00)
-                    : n.includes('light2') ? new THREE.Color(1.00, 0.78, 0.70)
-                    :                        new THREE.Color(1.00, 0.60, 0.42);
-        var intens  = n.includes('light1') ? 3.50
-                    : n.includes('light2') ? 1.00
-                    :                        0.55;
+                    : n.includes('light2') ? new THREE.Color(1.00, 0.58, 0.62)
+                    :                        new THREE.Color(1.00, 0.55, 0.38);
+        var intens  = n.includes('light1') ? 2.00
+                    : n.includes('light2') ? 0.80
+                    :                        0.50;
         var lumPow  = n.includes('light1') ? 2.5 : 2.2;
         child.renderOrder = 3;
         child.material = _makeLumMat(emTex, ringCol, intens, lumPow, true);
