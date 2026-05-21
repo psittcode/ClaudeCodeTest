@@ -634,23 +634,52 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       if (!child.isMesh || !child.material) return;
       child.material.depthWrite = false;
       var n = child.name;
-      if (n.includes('light1')) {
-        // Restore emissiveMap — texture provides spatial streaming patterns that give
-        // 3D depth. Compensate greenish texture (avg G=0.62 > R=0.39): emissive G=0.38
-        // so output G = 0.38×0.62 = 0.24 < output R = 1.0×0.39 = 0.39 → warm amber.
+      if (n.includes('light1') || n.includes('light2') || n.includes('light3')) {
+        // Luminance-mask ShaderMaterial: extract texture brightness as a greyscale mask,
+        // then multiply by a pure warm color. This gives the texture's spatial streaming
+        // patterns (depth, non-flat appearance) with ZERO green contamination — the
+        // texture's hue is discarded, only its luminance drives brightness.
+        var emTex = child.material.emissiveMap || child.material.map || null;
+        var warmCol = n.includes('light1') ? new THREE.Color(1.0, 0.80, 0.30)
+                    : n.includes('light2') ? new THREE.Color(1.0, 0.52, 0.10)
+                    :                        new THREE.Color(0.85, 0.35, 0.05);
+        var intens  = n.includes('light1') ? 2.2
+                    : n.includes('light2') ? 1.2
+                    :                        0.65;
         child.renderOrder = 3;
-        child.material.emissive          = new THREE.Color(1.0, 0.38, 0.10);
-        child.material.emissiveIntensity = 2.5;
-        child.layers.set(1);
-      } else if (n.includes('light2')) {
-        child.renderOrder = 3;
-        child.material.emissive          = new THREE.Color(1.0, 0.38, 0.10);
-        child.material.emissiveIntensity = 1.4;
-        child.layers.set(1);
-      } else if (n.includes('light3')) {
-        child.renderOrder = 3;
-        child.material.emissive          = new THREE.Color(0.90, 0.35, 0.08);
-        child.material.emissiveIntensity = 0.80;
+        child.material = new THREE.ShaderMaterial({
+          uniforms: {
+            tEmissive: { value: emTex },
+            uColor:    { value: warmCol },
+            uIntensity:{ value: intens },
+            uHasMap:   { value: emTex ? 1.0 : 0.0 }
+          },
+          vertexShader: [
+            'varying vec2 vUv;',
+            'void main(){',
+            '  vUv = uv;',
+            '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);',
+            '}'
+          ].join('\n'),
+          fragmentShader: [
+            'uniform sampler2D tEmissive;',
+            'uniform vec3 uColor;',
+            'uniform float uIntensity;',
+            'uniform float uHasMap;',
+            'varying vec2 vUv;',
+            'void main(){',
+            '  float lum = 1.0;',
+            '  if(uHasMap > 0.5){',
+            '    vec3 t = texture2D(tEmissive, vUv).rgb;',
+            '    lum = dot(t, vec3(0.299, 0.587, 0.114));',
+            '  }',
+            '  gl_FragColor = vec4(uColor * lum * uIntensity, 1.0);',
+            '}'
+          ].join('\n'),
+          transparent: false,
+          depthWrite:  false,
+          side: THREE.DoubleSide
+        });
         child.layers.set(1);
       } else if (n.includes('ring2')) {
         child.renderOrder = 3;
@@ -3072,7 +3101,6 @@ function animate(){
     if (blackHoleModel) blackHoleModel.traverse(function(o) { _bhTree.add(o); });
     scene.traverse(function(obj) {
       if (obj === scene) return;
-      if (obj.isLight) return; // keep scene lights — they illuminate PBR ring materials
       _bhSavedVisibility.set(obj, obj.visible);
       if (!_bhTree.has(obj)) obj.visible = false;
     });
