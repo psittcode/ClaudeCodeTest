@@ -649,12 +649,13 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         // light3 = deep amber-gold (not saturated orange)
         // Shift R:G ratio away from yellow (1:1) toward warm ivory/amber:
         // light1 = warm ivory (R dominates G by ~15%), light2 = amber, light3 = deep amber
-        var warmCol = n.includes('light1') ? new THREE.Color(1.0, 0.86, 0.65)
-                    : n.includes('light2') ? new THREE.Color(0.95, 0.62, 0.22)
-                    :                        new THREE.Color(0.80, 0.42, 0.10);
-        var intens  = n.includes('light1') ? 1.45
-                    : n.includes('light2') ? 0.85
-                    :                        0.48;
+        // Aggressive R>>G to escape yellow: R:G ratios 1.25:1 / 1.76:1 / 2.14:1
+        var warmCol = n.includes('light1') ? new THREE.Color(1.0, 0.80, 0.48)
+                    : n.includes('light2') ? new THREE.Color(0.88, 0.50, 0.14)
+                    :                        new THREE.Color(0.75, 0.35, 0.06);
+        var intens  = n.includes('light1') ? 1.40
+                    : n.includes('light2') ? 0.80
+                    :                        0.45;
         // Power: higher = sharper ring edges, less bleed into dark areas
         var lumPow  = n.includes('light1') ? 1.6 : 1.4;
         child.renderOrder = 3;
@@ -699,20 +700,20 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         child.layers.set(1);
       } else if (n.includes('ring2')) {
         child.renderOrder = 3;
-        child.material.emissive          = new THREE.Color(0.8, 0.42, 0.04);
+        child.material.emissive          = new THREE.Color(0.72, 0.38, 0.06);
         child.material.emissiveIntensity = 0.12;
         child.layers.set(1);
       } else if (n.includes('ring')) {
         child.renderOrder = 3;
-        if (child.material.map) child.material.emissiveMap = child.material.map;
-        child.material.emissive          = new THREE.Color(0.70, 0.46, 0.16);  // amber-brown
-        child.material.emissiveIntensity = 0.24;
+        child.material.emissiveMap = null;  // null baked-in yellow texture
+        child.material.emissive          = new THREE.Color(0.65, 0.40, 0.12);  // amber-brown
+        child.material.emissiveIntensity = 0.22;
         child.layers.set(1);
       } else if (n.includes('blackoutside')) {
         child.renderOrder = 3;
-        if (child.material.map) child.material.emissiveMap = child.material.map;
-        child.material.emissive          = new THREE.Color(0.42, 0.22, 0.05);  // dark brown
-        child.material.emissiveIntensity = 0.18;
+        child.material.emissiveMap = null;  // null baked-in yellow texture
+        child.material.emissive          = new THREE.Color(0.36, 0.17, 0.04);  // dark brown
+        child.material.emissiveIntensity = 0.16;
         child.layers.set(1);
       } else if (n.includes('center')) {
         // Sphere renders LAST (renderOrder:10) so it paints over ring additive blending
