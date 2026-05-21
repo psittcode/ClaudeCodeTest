@@ -654,41 +654,45 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       bhSpin.add(mesh);
     });
 
-    // Event horizon — Fresnel sphere renders last (renderOrder 20) to overwrite ring additive glow
-    var evGeo = new THREE.SphereGeometry(bhR * 0.12, 64, 64);
-    var evMat = new THREE.ShaderMaterial({
-      uniforms: {},
-      vertexShader: [
-        'varying vec3 vNormal; varying vec3 vViewPos;',
-        'void main(){',
-        '  vNormal  = normalize(normalMatrix * normal);',
-        '  vec4 mvp = modelViewMatrix * vec4(position,1.0);',
-        '  vViewPos = -mvp.xyz;',
-        '  gl_Position = projectionMatrix * mvp;',
-        '}'
-      ].join('\n'),
-      fragmentShader: [
-        'varying vec3 vNormal; varying vec3 vViewPos;',
-        'void main(){',
-        '  float nDotV = abs(dot(normalize(vNormal), normalize(vViewPos)));',
-        '  float edge  = 1.0 - nDotV;',
-        '  float haze  = pow(edge, 1.5);',
-        '  float rim   = pow(edge, 4.0);',
-        '  vec3 col = mix(vec3(0.025,0.012,0.003), vec3(0.12,0.28,0.85), haze * 0.95);',
-        '  col = mix(col, vec3(0.60,0.80,1.00), rim * 0.98);',
-        '  gl_FragColor = vec4(col, 1.0);',
-        '}'
-      ].join('\n'),
+    // Event horizon shadow — flat dark circle that foreshortens with the disk.
+    // CircleGeometry not SphereGeometry: a sphere silhouette is always a circle
+    // regardless of camera angle, which made the whole thing look spherical.
+    var ehGeo = new THREE.CircleGeometry(bhR * 0.13, 128);
+    var ehMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      depthWrite: false,
+      depthTest: false,
+      side: THREE.DoubleSide
+    });
+    var ehMesh = new THREE.Mesh(ehGeo, ehMat);
+    ehMesh.rotation.x = -Math.PI / 2;
+    ehMesh.renderOrder = 20;
+    ehMesh.layers.set(0);
+    bhSpin.add(ehMesh);
+
+    // Photon ring — thin bright arc right at the shadow edge
+    var prGeo = new THREE.RingGeometry(bhR * 0.120, bhR * 0.170, 128, 2);
+    var prMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uInnerCol: { value: new THREE.Color(1.00, 0.98, 0.90) },
+        uOuterCol: { value: new THREE.Color(0.55, 0.72, 1.00) },
+        uInnerR:   { value: bhR * 0.120 },
+        uOuterR:   { value: bhR * 0.170 },
+        uIntensity:{ value: 3.8 }
+      },
+      vertexShader:   ringVert,
+      fragmentShader: ringFrag,
       transparent: true,
-      blending:    THREE.NormalBlending,
       depthWrite:  false,
       depthTest:   false,
-      side: THREE.FrontSide
+      blending:    THREE.AdditiveBlending,
+      side: THREE.DoubleSide
     });
-    var evMesh = new THREE.Mesh(evGeo, evMat);
-    evMesh.renderOrder = 20;
-    evMesh.layers.set(0);
-    bhSpin.add(evMesh);
+    var prMesh = new THREE.Mesh(prGeo, prMat);
+    prMesh.rotation.x = -Math.PI / 2;
+    prMesh.renderOrder = 21; // renders after event horizon circle (20) so glow shines at edge
+    prMesh.layers.set(1);
+    bhSpin.add(prMesh);
 
     // bloomComposer: layer-1 meshes only → bloom texture
     bloomComposer = new THREE.EffectComposer(renderer);
