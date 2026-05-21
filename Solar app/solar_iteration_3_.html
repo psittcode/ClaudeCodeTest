@@ -630,18 +630,23 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       scene.add(bhPointLight3);
     }
 
+    // Load textures directly by path — GLTF KHR_materials_pbrSpecularGlossiness stores
+    // textures in custom shader uniforms, not material.emissiveMap/map, so traversal
+    // always returns null. Load them ourselves so _makeLumMat gets the real texture.
+    var _bhTexLoader = new THREE.TextureLoader();
+    var _bhTexBase = 'black_hole/textures/';
+    var bhTex = {
+      light1: _bhTexLoader.load(_bhTexBase + 'black_hole_light1_emissive.png'),
+      light2: _bhTexLoader.load(_bhTexBase + 'black_hole_light2_emissive.png'),
+      light3: _bhTexLoader.load(_bhTexBase + 'black_hole_light3_emissive.png'),
+      ring:   _bhTexLoader.load(_bhTexBase + 'ring_diffuse.png'),
+      bo:     _bhTexLoader.load(_bhTexBase + 'black_hole_blackoutside_diffuse.png')
+    };
+
     bhScene.traverse(function(child) {
       if (!child.isMesh || !child.material) return;
       child.material.depthWrite = false;
       var n = child.name;
-      // Helper to extract texture from either direct property or ShaderMaterial uniforms
-      var _getTex = function(mat) {
-        return mat.emissiveMap
-            || mat.map
-            || (mat.uniforms && mat.uniforms.emissiveMap && mat.uniforms.emissiveMap.value)
-            || (mat.uniforms && mat.uniforms.map && mat.uniforms.map.value)
-            || null;
-      };
 
       // Luminance-mask shader. Alpha uses lum^(lumPow*2) — sharper power means dark gaps
       // are truly transparent in AdditiveBlending instead of adding a faint warm tint.
@@ -675,7 +680,9 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       };
 
       if (n.includes('light1') || n.includes('light2') || n.includes('light3')) {
-        var emTex   = _getTex(child.material);
+        var emTex   = n.includes('light1') ? bhTex.light1
+                    : n.includes('light2') ? bhTex.light2
+                    :                        bhTex.light3;
         var ringCol = n.includes('light1') ? new THREE.Color(1.00, 1.00, 1.00)
                     : n.includes('light2') ? new THREE.Color(1.00, 0.36, 0.65)
                     :                        new THREE.Color(1.00, 0.58, 0.40);
@@ -692,14 +699,12 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         child.material.emissiveIntensity = 0.20;
         child.layers.set(1);
       } else if (n.includes('ring')) {
-        var rTex = _getTex(child.material);
         child.renderOrder = 3;
-        child.material = _makeLumMat(rTex, new THREE.Color(0.92, 0.68, 0.28), 1.20, 3.0, true);
+        child.material = _makeLumMat(bhTex.ring, new THREE.Color(0.92, 0.68, 0.28), 1.20, 3.0, true);
         child.layers.set(1);
       } else if (n.includes('blackoutside')) {
-        var boTex = _getTex(child.material);
         child.renderOrder = 3;
-        child.material = _makeLumMat(boTex, new THREE.Color(0.72, 0.42, 0.12), 0.80, 3.0, true);
+        child.material = _makeLumMat(bhTex.bo, new THREE.Color(0.72, 0.42, 0.12), 0.80, 3.0, true);
         child.layers.set(1);
       } else if (n.includes('center')) {
         // Sphere renders LAST (renderOrder:10) so it paints over ring additive blending
