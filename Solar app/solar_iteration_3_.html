@@ -635,23 +635,28 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       child.material.depthWrite = false;
       var n = child.name;
       if (n.includes('light1') || n.includes('light2') || n.includes('light3')) {
-        // Luminance-mask ShaderMaterial: extract texture brightness as a greyscale mask,
-        // then multiply by a pure warm color. This gives the texture's spatial streaming
-        // patterns (depth, non-flat appearance) with ZERO green contamination — the
-        // texture's hue is discarded, only its luminance drives brightness.
+        // Luminance-mask ShaderMaterial with TRANSPARENCY:
+        // - Extract luminance from texture → apply pow() for contrast sharpening
+        //   so only truly bright ring areas glow (dark gaps stay fully transparent)
+        // - Alpha channel = sharpened luminance so the disc geometry is transparent
+        //   everywhere the texture is dark, creating visible distinct ring bands
+        // - Color gradient: white-yellow innermost → orange → dark amber outward
         var emTex = child.material.emissiveMap || child.material.map || null;
-        var warmCol = n.includes('light1') ? new THREE.Color(1.0, 0.80, 0.30)
-                    : n.includes('light2') ? new THREE.Color(1.0, 0.52, 0.10)
-                    :                        new THREE.Color(0.85, 0.35, 0.05);
-        var intens  = n.includes('light1') ? 2.2
-                    : n.includes('light2') ? 1.2
-                    :                        0.65;
+        var warmCol = n.includes('light1') ? new THREE.Color(1.0, 0.95, 0.75)
+                    : n.includes('light2') ? new THREE.Color(1.0, 0.50, 0.08)
+                    :                        new THREE.Color(0.90, 0.32, 0.03);
+        var intens  = n.includes('light1') ? 1.4
+                    : n.includes('light2') ? 0.85
+                    :                        0.45;
+        // Power: higher = sharper ring edges, less bleed into dark areas
+        var lumPow  = n.includes('light1') ? 1.8 : 1.5;
         child.renderOrder = 3;
         child.material = new THREE.ShaderMaterial({
           uniforms: {
             tEmissive: { value: emTex },
             uColor:    { value: warmCol },
             uIntensity:{ value: intens },
+            uLumPow:   { value: lumPow },
             uHasMap:   { value: emTex ? 1.0 : 0.0 }
           },
           vertexShader: [
@@ -665,6 +670,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
             'uniform sampler2D tEmissive;',
             'uniform vec3 uColor;',
             'uniform float uIntensity;',
+            'uniform float uLumPow;',
             'uniform float uHasMap;',
             'varying vec2 vUv;',
             'void main(){',
@@ -672,12 +678,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
             '  if(uHasMap > 0.5){',
             '    vec3 t = texture2D(tEmissive, vUv).rgb;',
             '    lum = dot(t, vec3(0.299, 0.587, 0.114));',
+            '    lum = pow(lum, uLumPow);', // sharpen: dark gaps → truly transparent
             '  }',
-            '  gl_FragColor = vec4(uColor * lum * uIntensity, 1.0);',
+            '  float a = clamp(lum * uIntensity, 0.0, 1.0);',
+            '  gl_FragColor = vec4(uColor * lum * uIntensity, a);',
             '}'
           ].join('\n'),
-          transparent: false,
+          transparent: true,
           depthWrite:  false,
+          blending:    THREE.AdditiveBlending,
           side: THREE.DoubleSide
         });
         child.layers.set(1);
@@ -720,10 +729,16 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
             'varying vec3 vViewPos;',
             'void main(){',
             '  float nDotV   = abs(dot(normalize(vNormal), normalize(vViewPos)));',
-            '  float fresnel = pow(1.0 - nDotV, 3.0);',
-            '  vec3 dark = vec3(0.04, 0.02, 0.005);',
-            '  vec3 rim  = vec3(0.22, 0.11, 0.025);',
-            '  gl_FragColor = vec4(mix(dark, rim, fresnel), 1.0);',
+            '  float edge    = 1.0 - nDotV;',
+            '  float fresnel = pow(edge, 2.5);',
+            // Deep dark void center with blue-tinted glass rim — matches Sketchfab reference
+            '  vec3 dark = vec3(0.005, 0.005, 0.010);', // near-black with slight blue tint
+            '  vec3 rim  = vec3(0.45, 0.60, 1.00);',   // bright blue-white glow at grazing angle
+            // Subtle inner blue haze: darkest at center, faint blue-grey approaching rim
+            '  vec3 mid  = vec3(0.02, 0.03, 0.08);',
+            '  float t   = smoothstep(0.0, 1.0, edge);',
+            '  vec3 col  = mix(mix(dark, mid, t * 0.6), rim, fresnel);',
+            '  gl_FragColor = vec4(col, 1.0);',
             '}'
           ].join('\n'),
           transparent: false,
