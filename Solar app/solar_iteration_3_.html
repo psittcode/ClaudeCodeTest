@@ -639,11 +639,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // Single flat disk — 512 angular segments, 1 radial segment.
     // 1 radial segment = geometrically impossible to appear as a torus.
     // This is a 2D plane with zero vertical thickness.
-    var diskGeo = new THREE.RingGeometry(bhR * 2.1, bhR * 6.5, 512, 1);
+    var diskGeo = new THREE.RingGeometry(bhR * 1.20, bhR * 8.0, 512, 1);
     var diskMat = new THREE.ShaderMaterial({
       uniforms: {
-        uInnerR: { value: bhR * 2.1 },
-        uOuterR: { value: bhR * 6.5 }
+        uInnerR: { value: bhR * 1.20 },
+        uOuterR: { value: bhR * 8.0 }
       },
       vertexShader:   diskVert,
       fragmentShader: diskFrag,
@@ -655,13 +655,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     });
     var diskMesh = new THREE.Mesh(diskGeo, diskMat);
     diskMesh.rotation.x = -Math.PI / 2;  // flat in world XZ plane (horizontal)
-    diskMesh.renderOrder = 3;
+    // renderOrder 25 > EH sphere (20): disk renders on top, lensing shadow mask blacks out the center.
+    // This ensures the full disk ring is visible all around the sphere — no equator clipping.
+    diskMesh.renderOrder = 25;
     diskMesh.layers.set(0);
     bhSpin.add(diskMesh);
 
     // Event horizon — pure black sphere. No Fresnel/reflections: a black hole emits nothing.
     // The lensing shader's shadow mask reinforces the hard black cutoff in screen space.
-    bhEHRadius = bhR * 1.8; // large sphere: dominates composition at ~40% of disk width
+    bhEHRadius = bhR * 0.85; // ~40% of composition: sphere dominant but disk extends well beyond
     var ehGeo = new THREE.SphereGeometry(bhEHRadius, 64, 64);
     var ehMat = new THREE.MeshBasicMaterial({
       color: 0x000000,
@@ -685,7 +687,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     var _lensUniforms = {
       tDiffuse:  { value: null },
       uCenter:   { value: new THREE.Vector2(0.5, 0.5) },
-      uStrength: { value: 0.18 },
+      uStrength: { value: 0.35 },
       uInnerR:   { value: 0.03 },
       uOuterR:   { value: 0.12 },
       uShadowR:  { value: 0.06 },
@@ -706,24 +708,23 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         '  float dist=length(d);',
         // Hard shadow mask — pure black event horizon
         '  if(dist<uShadowR*0.97){ gl_FragColor=vec4(0.0,0.0,0.0,1.0); return; }',
-        // Gravitational warp — tight zone (1.0–1.4× shadow) bends starfield around BH
-        '  if(dist>uShadowR&&dist<uShadowR*1.4){',
-        '    float tw=smoothstep(uShadowR*1.4,uShadowR,dist);',
-        '    float warp=uStrength*tw*tw/max(dist,0.001);',
+        // Gravitational warp — bounded shift proportional to shadowR (no UV clamping streak)
+        // Formula: shift = uStrength * tw² * shadowR — max shift = uStrength×shadowR in UV space
+        '  if(dist>uShadowR&&dist<uShadowR*1.35){',
+        '    float tw=smoothstep(uShadowR*1.35,uShadowR,dist);',
+        '    float warpMag=uStrength*tw*tw*uShadowR;',
         '    vec2 dir=d/max(dist,0.001); dir.x/=uAspect;',
-        '    uv-=dir*warp; uv=clamp(uv,0.001,0.999);',
+        '    uv-=dir*warpMag; uv=clamp(uv,0.001,0.999);',
         '  }',
         '  vec4 col=texture2D(tDiffuse,uv);',
-        // Einstein arc — disk light lensed over the NORTH POLE; upper hemisphere only
-        // aboveCenter transitions 0→1 from below BH center to 1 shadowR above it
-        '  float aboveCenter=smoothstep(-uShadowR*0.5,uShadowR*0.8,vUv.y-uCenter.y);',
-        // Thin band just outside shadow boundary — the gap between shadow and disk inner edge
-        '  float arcW=smoothstep(uShadowR*1.3,uShadowR*1.00,dist)*smoothstep(uShadowR*0.97,uShadowR*1.09,dist);',
+        // Einstein arc — STRICTLY upper hemisphere (aboveCenter=0 for y≤uCenter.y, eliminates lower streak)
+        '  float aboveCenter=smoothstep(0.0,uShadowR*1.5,vUv.y-uCenter.y);',
+        // Thin bright ring just outside shadow boundary — lensed back-disk light over north pole
+        '  float arcW=smoothstep(uShadowR*1.35,uShadowR*1.00,dist)*smoothstep(uShadowR*0.97,uShadowR*1.10,dist);',
         '  arcW*=aboveCenter;',
         '  if(arcW>0.001){',
-        // mDir points TOWARD center — samples disk on back side (opposite to current pixel direction)
         '    vec2 mDir=-d/max(dist,0.001);',
-        '    vec2 arcUv=uCenter+mDir*(uShadowR*1.9)/vec2(uAspect,1.0);',
+        '    vec2 arcUv=uCenter+mDir*(uShadowR*2.0)/vec2(uAspect,1.0);',
         '    arcUv=clamp(arcUv,0.001,0.999);',
         '    vec4 arcSample=texture2D(tDiffuse,arcUv);',
         '    col+=arcSample*arcW*7.0;',
@@ -3079,11 +3080,6 @@ function animate(){
       // Keep galaxySkybox visible — provides the star background
       if (!_bhTree.has(obj) && obj !== galaxySkybox) obj.visible = false;
     });
-    // Dim the Milky Way texture to near-black so the prominent galactic band
-    // doesn't get warped by the lensing pass into a visible streak
-    if (galaxySkybox && galaxySkybox.material) {
-      galaxySkybox.material.color.setScalar(0.05);
-    }
     if (bhPointLight)  bhPointLight.visible  = true;
     if (bhPointLight2) bhPointLight2.visible = true;
     if (bhPointLight3) bhPointLight3.visible = true;
@@ -3099,10 +3095,6 @@ function animate(){
     if (_bhSavedVisibility) {
       _bhSavedVisibility.forEach(function(wasVisible, obj) { obj.visible = wasVisible; });
       _bhSavedVisibility = null;
-    }
-    // Restore galaxySkybox to full brightness
-    if (galaxySkybox && galaxySkybox.material) {
-      galaxySkybox.material.color.setScalar(1.0);
     }
     bhRendererSettings = false;
   }
@@ -3398,7 +3390,7 @@ function animate(){
         var _shadowR = bhEHRadius / (_camToBH * _halfTanFov * 2.0);
         bhLensingUniforms.uShadowR.value = Math.max(_shadowR, 0.015);
         bhLensingUniforms.uInnerR.value  = Math.max(_shadowR * 0.82, 0.012);
-        bhLensingUniforms.uOuterR.value  = Math.max(_shadowR * 1.4, 0.05);
+        bhLensingUniforms.uOuterR.value  = Math.max(_shadowR * 1.35, 0.04);
       }
       _bhScreenPos.project(camera);
       bhLensingUniforms.uCenter.value.set(
