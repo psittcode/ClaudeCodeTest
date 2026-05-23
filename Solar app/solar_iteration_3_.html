@@ -594,18 +594,16 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     var diskVert = [
       'varying float vRadius;',
       'varying float vAngle;',
-      'varying float vLocalX;',
       'void main(){',
       '  vRadius = length(position.xy);',
       '  vAngle  = atan(position.y, position.x);',
-      '  vLocalX = position.x;',
       '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
       '}'
     ].join('\n');
 
     var diskFrag = [
       'uniform float uInnerR, uOuterR, uTime;',
-      'varying float vRadius, vAngle, vLocalX;',
+      'varying float vRadius, vAngle;',
       'void main(){',
       '  float t = clamp((vRadius - uInnerR) / (uOuterR - uInnerR), 0.0, 1.0);',
       '  vec3 col;',
@@ -626,13 +624,14 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float b1 = 0.5 + 0.5*sin(logR*6.0);',
       '  float b2 = 0.5 + 0.5*sin(logR*15.0 + 1.0);',
       '  float bands = 0.40 + 0.38*b1 + 0.22*b2;',
-      // Horizontal flow: three overlapping sine waves in local X (= world X = left-right).
-      // Narrow amplitude (min 0.40) keeps radial layers visible at all times.
-      '  float xNorm = vLocalX / max(uOuterR, 0.001);',
-      '  float f1 = sin(xNorm * 10.0 - uTime * 1.30);',
-      '  float f2 = sin(xNorm * 18.0 - uTime * 1.80 + 1.3);',
-      '  float f3 = sin(xNorm * 28.0 - uTime * 2.40 + 2.7);',
-      '  float swirl = 0.70 + 0.16*f1 + 0.09*f2 + 0.05*f3;',
+      // Azimuthal orbital arcs — n=8 and n=5 bright arcs orbit each ring (Keplerian: inner faster).
+      // From any above-angle camera, the near-side arcs project as horizontal left-to-right streaks.
+      // max(cos,0) gives sharp bright peaks separated by dark gaps — distinct "lines" per layer.
+      '  float kep = clamp(pow(uInnerR / max(vRadius, uInnerR * 0.05), 1.5), 0.0, 1.0);',
+      '  float spd = 0.30 + 0.70 * kep;',
+      '  float s1 = cos(8.0*vAngle - uTime * 1.30 * spd);',
+      '  float s2 = cos(5.0*vAngle - uTime * 0.88 * spd + 1.2);',
+      '  float swirl = 0.55 + 0.28*max(s1, 0.0) + 0.17*max(s2, 0.0);',
       '  float alpha = clamp(bright * bands * swirl * pBoost, 0.0, 1.0);',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
