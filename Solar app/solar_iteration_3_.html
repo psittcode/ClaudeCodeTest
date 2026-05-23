@@ -625,18 +625,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float b1 = 0.5 + 0.5*sin(logR*6.0);',
       '  float b2 = 0.5 + 0.5*sin(logR*15.0 + 1.0);',
       '  float bands = 0.40 + 0.38*b1 + 0.22*b2;',
-      // Doppler asymmetry: near side (facing camera) is bright, far side is dim.
-      // This is physically correct and prevents dark "shadow" patches from being lensed above the BH.
-      // uCamDir = direction from disk center toward camera, in local XY (= world XZ) coords.
+      // Gentle Doppler: near side (facing camera) slightly brighter — 1.54:1 ratio only.
+      // Keeping it subtle prevents lensing from projecting an asymmetric bright arc (stray line).
       '  vec2 diskDir = vec2(cos(vAngle), sin(vAngle));',
       '  float nearness = dot(diskDir, uCamDir);',
-      '  float doppler = 0.20 + 0.80 * (nearness * 0.5 + 0.5);',
-      // Keplerian orbital arcs — inner rings orbit faster. On the near side they appear as
-      // left-to-right flowing lines; on the dim far side they are nearly invisible.
-      '  float kep = clamp(pow(uInnerR / max(vRadius, uInnerR * 0.05), 0.75), 0.0, 1.0);',
-      '  float spd = 0.40 + 0.60 * kep;',
-      '  float a4 = 0.5 + 0.5*cos(4.0*vAngle - uTime * 2.5 * spd);',
-      '  float a2 = 0.5 + 0.5*cos(2.0*vAngle - uTime * 1.5 * spd + 0.9);',
+      '  float doppler = 0.65 + 0.35 * (nearness * 0.5 + 0.5);',
+      // Uniform orbital arcs — all radii same angular velocity so the pattern holds its shape.
+      // Keplerian differential was removed: it caused the bright spoke at t=0 to unwind outward.
+      '  float a4 = 0.5 + 0.5*cos(4.0*vAngle - uTime * 1.2);',
+      '  float a2 = 0.5 + 0.5*cos(2.0*vAngle - uTime * 0.8 + 0.9);',
       '  float orb = 0.45 + 0.35*a4 + 0.20*a2;',
       '  float swirl = orb * doppler;',
       '  float alpha = clamp(bright * bands * swirl * pBoost, 0.0, 1.0);',
