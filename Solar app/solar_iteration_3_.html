@@ -740,17 +740,12 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         '    uv-=dir*warpMag; uv=clamp(uv,0.001,0.999);',
         '  }',
         '  vec4 col=texture2D(tDiffuse,uv);',
-        // Einstein ring — lensed secondary image of disk from opposite side (full 360°)
-        '  float arcW=smoothstep(uShadowR*1.5,uShadowR*1.02,dist)*smoothstep(uShadowR*0.97,uShadowR*1.15,dist);',
-        '  if(arcW>0.001){',
-        '    vec2 mDir=-d/max(dist,0.001);',
-        '    vec2 arcUv=uCenter+mDir*(uShadowR*2.2)/vec2(uAspect,1.0);',
-        '    arcUv=clamp(arcUv,0.001,0.999);',
-        '    col.rgb+=texture2D(tDiffuse,arcUv).rgb*arcW*14.0;',
-        '  }',
-        // Photon ring — razor-thin Gaussian ring at exactly the photon sphere (1.0×shadowR)
-        '  float prD=(dist-uShadowR*1.0)/(uShadowR*0.018);',
-        '  col.rgb+=vec3(1.0,0.97,0.88)*exp(-prD*prD)*3.5;',
+        // Photon ring — razor-thin Gaussian ring tracing the photon sphere (1.0×shadowR)
+        // Biased brighter above shadow center (d.y>0) to simulate disk lensed over north pole
+        '  float prD=(dist-uShadowR)/(uShadowR*0.018);',
+        '  float prRing=exp(-prD*prD);',
+        '  float yUp=clamp(d.y/max(dist,0.001)*0.5+0.5,0.0,1.0);',
+        '  col.rgb+=vec3(1.0,0.97,0.88)*prRing*(6.0+6.0*yUp);',
         '  gl_FragColor=col;',
         '}'
       ].join('\n')
@@ -1433,68 +1428,9 @@ const moon = new THREE.Mesh(
 moon.position.set(1.5, 0, 0);
 moonGroup.add(moon);
 
-// 🪐 ORBIT LINES
+// Orbit lines removed — all THREE.Line primitives deleted to prevent stray line artifacts
 const orbitLines = [];
-meshes.forEach(m => {
-  const points = [];
-  for (let i = 0; i <= 128; i++) {
-    const angle = (i / 128) * Math.PI * 2;
-    points.push(new THREE.Vector3(
-      Math.cos(angle) * m.userData.dist,
-      0,
-      Math.sin(angle) * m.userData.dist
-    ));
-  }
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.15
-  });
-  const orbit = new THREE.Line(geometry, material);
-  scene.add(orbit);
-  orbitLines.push(orbit);
-});
-
-// 🌕 Moon orbit line
-const moonOrbitPoints = [];
-for (let i = 0; i <= 128; i++) {
-  const angle = (i / 128) * Math.PI * 2;
-  moonOrbitPoints.push(new THREE.Vector3(
-    Math.cos(angle) * 1.5,
-    0,
-    Math.sin(angle) * 1.5
-  ));
-}
-const moonOrbitLine = new THREE.Line(
-  new THREE.BufferGeometry().setFromPoints(moonOrbitPoints),
-  new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 })
-);
-moonGroup.add(moonOrbitLine);
-orbitLines.push(moonOrbitLine);
-
-// 🪐 Jupiter moon orbit lines
-// Jupiter moon orbit lines — stored separately, updated each frame
 const jupiterMoonOrbitLines = [];
-const jupiterMoonDistances = [2.1, 3.3, 5.25, 9.24];
-jupiterMoonDistances.forEach(dist => {
-  const points = [];
-  for (let i = 0; i <= 128; i++) {
-    const angle = (i / 128) * Math.PI * 2;
-    points.push(new THREE.Vector3(
-      Math.cos(angle) * dist,
-      0,
-      Math.sin(angle) * dist
-    ));
-  }
-  const orbitLine = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(points),
-    new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 })
-  );
-  scene.add(orbitLine);
-  orbitLines.push(orbitLine);
-  jupiterMoonOrbitLines.push(orbitLine);
-});
 
 let orbitsVisible = true;
 document.getElementById("toggleOrbits").addEventListener("click", () => {
@@ -2104,10 +2040,8 @@ galPlane.rotation.x = -Math.PI / 2;
 galacticGroup.add(galPlane);
 
 // Grid on the galactic plane for spatial reference
-const galGrid = new THREE.GridHelper(640, 16, 0x4499cc, 0x1a3366);
-galGrid.material.opacity = 0.55;
-galGrid.material.transparent = true;
-galacticGroup.add(galGrid);
+// galGrid GridHelper removed (line primitive deleted)
+const galGrid = { visible: false }; // stub — keeps toggle handler from erroring
 
 // Galactic centre (Sagittarius A*)
 const galCentre = new THREE.Mesh(
@@ -2120,45 +2054,11 @@ galacticGroup.add(new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.12 })
 ));
 
-// Ideal flat orbit ring (ignoring Z oscillation — the "clean circle")
-{
-  const pts = [];
-  for (let i = 0; i <= 128; i++) {
-    const a = (i / 128) * Math.PI * 2;
-    pts.push(new THREE.Vector3(GAL_R * Math.cos(a), 0, -GAL_R * Math.sin(a)));
-  }
-  galacticGroup.add(new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineBasicMaterial({ color: 0x1e3a8a, transparent: true, opacity: 0.5 })
-  ));
-}
-
-// Corkscrew path — the actual helical trajectory through the galaxy
-{
-  const pts = [];
-  for (let i = 0; i <= 2000; i++) {
-    const t = (i / 2000) * Math.PI * 2;
-    pts.push(new THREE.Vector3(
-      GAL_R * Math.cos(t),
-      GAL_Z_MAX * Math.sin(GAL_OSC_RATIO * t),
-      -GAL_R * Math.sin(t)
-    ));
-  }
-  galacticGroup.add(new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineBasicMaterial({ color: 0x5577ff, transparent: true, opacity: 0.85 })
-  ));
-}
-
-// Radius arm from galactic centre to current solar system position
+// Galactic orbit ring, corkscrew path, and radius arm removed (line primitives deleted)
 const galArmGeo = new THREE.BufferGeometry().setFromPoints([
   new THREE.Vector3(0, 0, 0), new THREE.Vector3(GAL_R, 0, 0)
 ]);
-const galArm = new THREE.Line(
-  galArmGeo,
-  new THREE.LineBasicMaterial({ color: 0x445566, transparent: true, opacity: 0.35 })
-);
-galacticGroup.add(galArm);
+const galArm = { geometry: galArmGeo }; // stub — keeps animate-loop references valid
 
 // Solar system position marker — a Group so children (disc, arrow, glow) keep their
 // orientation fixed in world space while only the texture sphere spins independently.
@@ -2191,8 +2091,7 @@ const vegaDir = new THREE.Vector3(
   Math.sin(19 * Math.PI/180),                                  //  0.326
  -Math.cos(19 * Math.PI/180) * Math.sin(67 * Math.PI/180)    // -0.871
 ).normalize();
-const vegaArrowGal = new THREE.ArrowHelper(vegaDir, new THREE.Vector3(0,0,0), 28, 0xaaff44, 5, 3);
-galSunMarker.add(vegaArrowGal);
+// ArrowHelper removed (line primitive deleted)
 
 // Earth dot orbiting inside the ecliptic ring.
 // Lives in galacticGroup (world space) so its position is absolute —
@@ -2217,12 +2116,7 @@ const galEarthTrailPos = new Float32Array(GAL_EARTH_TRAIL_MAX * 3);
 const galEarthTrailGeo = new THREE.BufferGeometry();
 galEarthTrailGeo.setAttribute('position', new THREE.BufferAttribute(galEarthTrailPos, 3));
 galEarthTrailGeo.setDrawRange(0, 0);
-const galEarthTrail = new THREE.Line(
-  galEarthTrailGeo,
-  new THREE.LineBasicMaterial({ color: 0x33ccff, transparent: true, opacity: 0.8 })
-);
-galEarthTrail.visible = false;
-galacticGroup.add(galEarthTrail);
+const galEarthTrail = { visible: false }; // stub — line primitive removed
 
 // Sun trail — tracks the solar system's corkscrew galactic orbit path around Sag A*
 const GAL_SUN_TRAIL_MAX = 20000;
@@ -2230,12 +2124,7 @@ const galSunTrailPos = new Float32Array(GAL_SUN_TRAIL_MAX * 3);
 const galSunTrailGeo = new THREE.BufferGeometry();
 galSunTrailGeo.setAttribute('position', new THREE.BufferAttribute(galSunTrailPos, 3));
 galSunTrailGeo.setDrawRange(0, 0);
-const galSunTrail = new THREE.Line(
-  galSunTrailGeo,
-  new THREE.LineBasicMaterial({ color: 0xffcc44, transparent: true, opacity: 0.6 })
-);
-galSunTrail.visible = false;
-galacticGroup.add(galSunTrail);
+const galSunTrail = { visible: false }; // stub — line primitive removed
 
 // ── Galactic view state ────────────────────────────────────────
 let galacticViewActive  = false;
@@ -2777,37 +2666,20 @@ const spaceshipGroup = new THREE.Group();
 scene.add(spaceshipGroup);
 spaceshipGroup.visible = false;
 
-// Galactic forward axis line (the "direction of travel" spine)
-{
-  const pts = [new THREE.Vector3(0,0,0), new THREE.Vector3(0, 0, SE_YEARS * SE_PITCH)];
-  spaceshipGroup.add(new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineBasicMaterial({ color: 0x334466, transparent: true, opacity: 0.5 })
-  ));
-}
-
-// Dynamic travel trails — pre-allocated buffers grown each frame
+// Forward axis line and travel trails removed (line primitives deleted)
 const SE_TRAIL_MAX = 10000;
 
 const seEarthTrailPos = new Float32Array(SE_TRAIL_MAX * 3);
 const seEarthTrailGeo = new THREE.BufferGeometry();
 seEarthTrailGeo.setAttribute('position', new THREE.BufferAttribute(seEarthTrailPos, 3));
 seEarthTrailGeo.setDrawRange(0, 0);
-const seEarthTrail = new THREE.Line(
-  seEarthTrailGeo,
-  new THREE.LineBasicMaterial({ color: 0x33ccff, transparent: true, opacity: 0.7 })
-);
-spaceshipGroup.add(seEarthTrail);
+const seEarthTrail = { geometry: seEarthTrailGeo, visible: false }; // stub
 
 const seSunTrailPos = new Float32Array(SE_TRAIL_MAX * 3);
 const seSunTrailGeo = new THREE.BufferGeometry();
 seSunTrailGeo.setAttribute('position', new THREE.BufferAttribute(seSunTrailPos, 3));
 seSunTrailGeo.setDrawRange(0, 0);
-const seSunTrail = new THREE.Line(
-  seSunTrailGeo,
-  new THREE.LineBasicMaterial({ color: 0xffdd44, transparent: true, opacity: 0.4 })
-);
-spaceshipGroup.add(seSunTrail);
+const seSunTrail = { geometry: seSunTrailGeo, visible: false }; // stub
 
 let seEarthTrailCount = 0;
 let seSunTrailCount   = 0;
@@ -2837,12 +2709,8 @@ seFutureMarker.position.set(
 );
 spaceshipGroup.add(seFutureMarker);
 
-// Solar apex arrow (Vega direction, layer 3) — green-yellow
-const seVegaArrow = new THREE.ArrowHelper(
-  vegaDir, new THREE.Vector3(0, 0, SE_YEARS * SE_PITCH * 0.5),
-  22, 0xaaff44, 5, 3
-);
-spaceshipGroup.add(seVegaArrow);
+// seVegaArrow ArrowHelper removed (line primitive deleted)
+const seVegaArrow = null;
 
 // Great Attractor arrow (layer 5) — toward Leo/Virgo
 // Galactic coords: l~307°, b~+18° (in our CW galactic frame)
@@ -2851,11 +2719,8 @@ const attractorDir = new THREE.Vector3(
    Math.sin(18 * Math.PI/180),
   -Math.cos(18 * Math.PI/180) * Math.sin(307 * Math.PI/180)
 ).normalize();
-const seAttractorArrow = new THREE.ArrowHelper(
-  attractorDir, new THREE.Vector3(0, 0, SE_YEARS * SE_PITCH * 0.5),
-  35, 0xff55ff, 7, 4
-);
-spaceshipGroup.add(seAttractorArrow);
+// seAttractorArrow ArrowHelper removed (line primitive deleted)
+const seAttractorArrow = null;
 
 // Animated Earth marker — moves along the helix driven by simulation time
 const seEarthMarker = new THREE.Mesh(
@@ -3056,7 +2921,7 @@ function animate(){
   }
   galaxySkybox.position.copy(camera.position);
   if (bhStarfield) bhStarfield.position.copy(camera.position);
-  solarSystemMarker.visible = outsideSkybox && !galacticViewActive;
+  solarSystemMarker.visible = !bhRendererSettings && outsideSkybox && !galacticViewActive;
   const _ssBtn = document.getElementById('solarSystemBtn');
   if (_ssBtn) _ssBtn.style.display = outsideSkybox ? 'block' : 'none';
 
@@ -3078,7 +2943,8 @@ function animate(){
   if (BH_CLOSE_DIST > 0) {
     if (blackHoleModel) {
       blackHoleModel.visible = bhTransitionT > 0.05;
-      blackHoleModel.rotation.y += 0.0015 * deltaScale;
+      // No rotation — disk is rotationally symmetric; rotating the group causes the
+      // shadow mask center (projected galacticCorePos) and the disk to drift apart
     }
   }
 
@@ -3210,10 +3076,6 @@ function animate(){
       }
     });
 
-    // Move orbit lines with Jupiter too
-    jupiterMoonOrbitLines.forEach(line => {
-      line.position.copy(jupiterWorldPos);
-    });
   }
 
 // Galactic view — advance solar system + Earth dot along corkscrew path
@@ -3409,11 +3271,12 @@ function animate(){
 
   if (bhRendererSettings && finalComposer) {
     // Update lensing uniforms every frame
-    if (bhLensingUniforms && blackHoleModel) {
-      blackHoleModel.getWorldPosition(_bhScreenPos);
-      // Dynamic shadow radius: project the event horizon sphere radius to UV space
+    if (bhLensingUniforms && galacticCorePos) {
+      // Use galacticCorePos directly — static world position, no scene-graph traversal needed.
+      // This guarantees the shadow mask center matches the disk's rendered center every frame.
+      _bhScreenPos.copy(galacticCorePos);
       if (bhEHRadius > 0) {
-        var _camToBH = camera.position.distanceTo(_bhScreenPos);
+        var _camToBH = camera.position.distanceTo(galacticCorePos);
         var _halfTanFov = Math.tan(camera.fov * Math.PI / 360);
         var _shadowR = bhEHRadius / (_camToBH * _halfTanFov * 2.0);
         bhLensingUniforms.uShadowR.value = Math.max(_shadowR, 0.015);
