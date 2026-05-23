@@ -604,6 +604,23 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     var diskFrag = [
       'uniform float uInnerR, uOuterR, uTime, uAlphaMul;',
       'varying float vRadius, vAngle;',
+      // --- 2D value noise + 4-octave FBM for cloud-like turbulence ---
+      'float hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+      'float vnoise(vec2 p){',
+      '  vec2 i = floor(p);',
+      '  vec2 f = fract(p);',
+      '  vec2 u = f*f*(3.0 - 2.0*f);',
+      '  return mix(mix(hash21(i+vec2(0.0,0.0)), hash21(i+vec2(1.0,0.0)), u.x),',
+      '             mix(hash21(i+vec2(0.0,1.0)), hash21(i+vec2(1.0,1.0)), u.x), u.y);',
+      '}',
+      'float fbm4(vec2 p){',
+      '  float v = 0.0;',
+      '  v += 0.533 * vnoise(p);',
+      '  v += 0.267 * vnoise(p * 2.03);',
+      '  v += 0.133 * vnoise(p * 4.07);',
+      '  v += 0.067 * vnoise(p * 8.13);',
+      '  return v;',
+      '}',
       'void main(){',
       '  float t = clamp((vRadius - uInnerR) / (uOuterR - uInnerR), 0.0, 1.0);',
       '  vec3 col;',
@@ -635,14 +652,16 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float arm2 = 0.5 + 0.5*sin(vAngle*3.0 + logR*2.5 - uTime*0.75);',
       '  float arm3 = 0.5 + 0.5*sin(vAngle*5.0 - logR*1.8 - uTime*1.10);',
       '  float armMix = 0.55 + 0.20*arm1 + 0.15*arm2 + 0.10*arm3;',
-      // Saturn-ring-like granular texture — high-frequency variations that
-      // co-rotate (uTime term inside the angle) so the orbital motion is visible
-      // as moving "chunks". Integer N (47,89,131) keeps it seam-continuous.
-      '  float gA = vAngle - uTime*0.55;',
-      '  float gran1 = 0.5 + 0.5*sin(gA*47.0  + logR*22.0);',
-      '  float gran2 = 0.5 + 0.5*sin(gA*89.0  - logR*38.0 + 1.3);',
-      '  float gran3 = 0.5 + 0.5*sin(gA*131.0 + logR*61.0 + 2.7);',
-      '  float granular = 0.50 + 0.22*gran1 + 0.16*gran2 + 0.12*gran3;',
+      // Cloud-like FBM turbulence in a co-rotating polar frame.
+      // (cos(rotAng), sin(rotAng))*vRadius is C^infty everywhere — no atan2 seam,
+      // and rotating the frame means features orbit smoothly around the BH as
+      // uTime advances. fbm4 = 4-octave value noise → soft cloud structure.
+      // grain = an extra fine-scale noise sample for visible dust granularity.
+      '  float rotAng = vAngle - uTime * 0.18;',
+      '  vec2  pCloud = vec2(vRadius*cos(rotAng), vRadius*sin(rotAng)) / max(uInnerR * 0.55, 0.001);',
+      '  float cloud  = fbm4(pCloud);',
+      '  float grain  = vnoise(pCloud * 9.3);',
+      '  float granular = 0.35 + 0.50*cloud + 0.18*grain;',
       // Inner photon ring (t<0.05) stays uniform — orbital + granular only
       // modulate the outer disk so the bright Planckian ring stays unbroken.
       '  float fade = smoothstep(0.04, 0.18, t);',
@@ -3051,7 +3070,9 @@ function animate(){
       blackHoleModel.visible = bhTransitionT > 0.05;
     }
     if (bhDiskMaterials && bhTransitionT > 0) {
-      var _dt = deltaMs * 0.0025;
+      // Was 0.0025 = ~10 s/revolution — far too fast. 0.0005 = ~50 s/revolution,
+      // a slow plasma flow that reads as orbital motion without being dizzying.
+      var _dt = deltaMs * 0.0005;
       for (var _di = 0; _di < bhDiskMaterials.length; _di++) {
         bhDiskMaterials[_di].uniforms.uTime.value += _dt;
       }
