@@ -629,8 +629,8 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float b3 = 0.5 + 0.5*sin(logR*35.0 + 0.5);',
       '  float b4 = 0.5 + 0.5*sin(logR*75.0 + 1.8);',
       '  float bands = 0.15 + 0.42*b1 + 0.25*b2 + 0.12*b3 + 0.06*b4;',
-      // Doppler beaming — min 0.30: dark side always visible, no half-ring streak artifact
-      '  float doppler = 0.65 + 0.35 * cos(vAngle);',
+      // Doppler beaming — low contrast to prevent warp from projecting bright spot as stray line
+      '  float doppler = 0.85 + 0.15 * cos(vAngle);',
       '  float alpha = clamp(bright * bands * doppler * pBoost, 0.0, 1.0);',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
@@ -672,10 +672,10 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       _gc.width = _gc.height = 256;
       var _gx = _gc.getContext('2d');
       var _gr = _gx.createRadialGradient(128,128,0,128,128,128);
-      _gr.addColorStop(0,    'rgba(255,150,20,0.75)');
-      _gr.addColorStop(0.30, 'rgba(255,90,5,0.40)');
-      _gr.addColorStop(0.60, 'rgba(200,45,0,0.15)');
-      _gr.addColorStop(1.0,  'rgba(140,20,0,0)');
+      _gr.addColorStop(0,    'rgba(255,130,15,0.38)');
+      _gr.addColorStop(0.35, 'rgba(240,70,3,0.16)');
+      _gr.addColorStop(0.65, 'rgba(180,30,0,0.05)');
+      _gr.addColorStop(1.0,  'rgba(120,10,0,0)');
       _gx.fillStyle = _gr;
       _gx.fillRect(0, 0, 256, 256);
       var _gSprite = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -685,7 +685,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         depthWrite: false,
         depthTest: false
       }));
-      _gSprite.scale.set(bhR * 24, bhR * 24, 1);
+      _gSprite.scale.set(bhR * 10, bhR * 10, 1);
       _gSprite.renderOrder = 15;
       bhSpin.add(_gSprite);
     })();
@@ -731,7 +731,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     var _lensUniforms = {
       tDiffuse:  { value: null },
       uCenter:   { value: new THREE.Vector2(0.5, 0.5) },
-      uStrength: { value: 0.50 },
+      uStrength: { value: 1.80 },
       uInnerR:   { value: 0.03 },
       uOuterR:   { value: 0.12 },
       uShadowR:  { value: 0.06 },
@@ -766,7 +766,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         '    mirUv=clamp(mirUv,0.001,0.999);',
         '    vec4 mirCol=texture2D(tDiffuse,mirUv);',
         '    float arcStr=exp(-arcDist/(uShadowR*0.4))*(d.y/max(dist,0.001))*yFade;',
-        '    col.rgb=mix(col.rgb,mirCol.rgb*1.5,clamp(arcStr,0.0,0.65));',
+        '    col.rgb=mix(col.rgb,mirCol.rgb*1.2,clamp(arcStr,0.0,0.30));',
         '  }',
         // Photon ring + warm halo — soft bloom around shadow edge
         '  float prD=(dist-uShadowR)/(uShadowR*0.06);',
