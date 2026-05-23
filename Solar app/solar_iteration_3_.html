@@ -618,12 +618,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float pr = exp(-(innerDist*innerDist) / (2.0*sigma*sigma));',
       '  float pBoost = 1.0 + 10.0 * pr;',
       '  col = mix(col, vec3(1.0,0.92,0.68), pr * 0.60);',
-      '  float bright = pow(max(1.0-t, 0.0), 1.8) * 1.8;',
-      // Radial texture (static reference pattern)
+      // Slow falloff so outer rings stay visible — was pow(1-t,1.8)*1.8 which fades by t=0.5
+      '  float bright = pow(max(1.0-t, 0.0), 1.0) * 1.5;',
+      // Four log-radius frequencies stack into many visible concentric plasma layers
       '  float logR = log(max(vRadius / max(uInnerR, 0.001), 1.001));',
-      '  float b1 = 0.5 + 0.5*sin(logR*6.0);',
-      '  float b2 = 0.5 + 0.5*sin(logR*15.0 + 1.0);',
-      '  float bands = 0.40 + 0.38*b1 + 0.22*b2;',
+      '  float b1 = 0.5 + 0.5*sin(logR*5.0);',
+      '  float b2 = 0.5 + 0.5*sin(logR*11.0 + 1.0);',
+      '  float b3 = 0.5 + 0.5*sin(logR*23.0 + 2.1);',
+      '  float b4 = 0.5 + 0.5*sin(logR*41.0 + 0.7);',
+      '  float bands = 0.15 + 0.30*b1 + 0.22*b2 + 0.18*b3 + 0.15*b4;',
       // Horizontal waves in world-X (derived from position without extra varying).
       // Y-symmetric in local disk space: near side and far side have identical brightness
       // at each X, so the lensing warp produces a uniform photon arc — no stray line.
