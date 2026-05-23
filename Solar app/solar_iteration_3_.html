@@ -627,16 +627,18 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float b3 = 0.5 + 0.5*sin(logR*23.0 + 2.1);',
       '  float b4 = 0.5 + 0.5*sin(logR*41.0 + 0.7);',
       '  float bands = 0.15 + 0.30*b1 + 0.22*b2 + 0.18*b3 + 0.15*b4;',
-      // Horizontal waves in world-X (derived from position without extra varying).
-      // Y-symmetric in local disk space: near side and far side have identical brightness
-      // at each X, so the lensing warp produces a uniform photon arc — no stray line.
-      // Floor 0.65 keeps all radial colour layers visible at all times.
-      '  float xNorm = vRadius * cos(vAngle) / max(uOuterR, 0.001);',
-      '  float fh1 = 0.5 + 0.5*sin(xNorm * 7.0  - uTime * 1.30);',
-      '  float fh2 = 0.5 + 0.5*sin(xNorm * 13.0 - uTime * 1.95 + 0.9);',
-      '  float fh3 = 0.5 + 0.5*sin(xNorm * 20.0 - uTime * 2.60 + 2.1);',
-      '  float swirl = 0.65 + 0.20*fh1 + 0.10*fh2 + 0.05*fh3;',
-      '  float alpha = clamp(bright * bands * swirl * pBoost, 0.0, 1.0);',
+      // Orbital spiral arms — integer harmonics of vAngle (N=2,3,5) are periodic
+      // across the atan2 ±π seam, so sin(N*vAngle) is continuous everywhere and
+      // produces no stray seam-line. logR term gives spiral pitch so arms wind
+      // inward like real accretion disks. -uTime rotates them around the BH.
+      // Inner photon ring (t<0.05) is left uniform — orbital arms only modulate
+      // the outer disk so the bright Planckian ring stays clean and unbroken.
+      '  float arm1 = 0.5 + 0.5*sin(vAngle*2.0 + logR*1.5 - uTime*0.50);',
+      '  float arm2 = 0.5 + 0.5*sin(vAngle*3.0 + logR*2.5 - uTime*0.75);',
+      '  float arm3 = 0.5 + 0.5*sin(vAngle*5.0 - logR*1.8 - uTime*1.10);',
+      '  float armMix = 0.55 + 0.20*arm1 + 0.15*arm2 + 0.10*arm3;',
+      '  float orbit  = mix(1.0, armMix, smoothstep(0.04, 0.18, t));',
+      '  float alpha = clamp(bright * bands * orbit * pBoost, 0.0, 1.0);',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
     ].join('\n');
