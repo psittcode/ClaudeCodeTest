@@ -624,11 +624,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float b1 = 0.5 + 0.5*sin(logR*6.0);',
       '  float b2 = 0.5 + 0.5*sin(logR*15.0 + 1.0);',
       '  float bands = 0.40 + 0.38*b1 + 0.22*b2;',
-      // Keplerian azimuthal sweep — 2 bright blobs orbiting, integer n=2,4 guarantees no seam
-      // orbSpeed is high so inner edge visibly sweeps; outer edge slower (physically correct)
-      '  float orbSpeed = 2.5 / max(pow(vRadius / max(uInnerR, 0.001), 1.5), 0.10);',
-      '  float sweep = cos(2.0*vAngle - uTime * orbSpeed);',
-      '  float swirl = 0.50 + 0.38*sweep + 0.12*sweep*sweep;',
+      // Keplerian azimuthal flow — single bright blob (n=1) sweeps left-to-right around ring.
+      // n=1 is seam-free (cos completes exactly one cycle). Two blobs (n=2) looked like radial pulsing.
+      '  float orbSpeed = 3.0 / max(pow(vRadius / max(uInnerR, 0.001), 1.5), 0.10);',
+      '  float sweep = cos(vAngle - uTime * orbSpeed);',
+      '  float swirl = 0.38 + 0.45*max(sweep, 0.0) + 0.17*max(sweep*sweep*sweep, 0.0);',
       '  float alpha = clamp(bright * bands * swirl * pBoost, 0.0, 1.0);',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
@@ -757,17 +757,6 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         '  vec2 dir=d/max(dist,0.001); dir.x/=uAspect;',
         '  uv-=dir*warpMag; uv=clamp(uv,0.001,0.999);',
         '  vec4 col=texture2D(tDiffuse,uv);',
-        // Secondary lensing: disk-over-sphere — mirror-sample from below so disk appears to wrap
-        // above the event horizon from any side-on viewing angle
-        '  float arcDist=dist-uShadowR;',
-        '  float yFade=smoothstep(0.0,uShadowR*0.2,d.y);',
-        '  if(arcDist>0.0&&arcDist<uShadowR*1.6&&yFade>0.0){',
-        '    vec2 mirUv=uCenter+vec2(d.x,-d.y)/vec2(uAspect,1.0);',
-        '    mirUv=clamp(mirUv,0.001,0.999);',
-        '    vec4 mirCol=texture2D(tDiffuse,mirUv);',
-        '    float arcStr=exp(-arcDist/(uShadowR*0.4))*(d.y/max(dist,0.001))*yFade;',
-        '    col.rgb=mix(col.rgb,mirCol.rgb*1.2,clamp(arcStr,0.0,0.30));',
-        '  }',
         // Photon ring + warm halo — soft bloom around shadow edge
         '  float prD=(dist-uShadowR)/(uShadowR*0.06);',
         '  float prRing=exp(-prD*prD);',
