@@ -604,29 +604,29 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       'varying float vRadius, vAngle;',
       'void main(){',
       '  float t = clamp((vRadius - uInnerR) / (uOuterR - uInnerR), 0.0, 1.0);',
-      // Color: pure white → pink-white → gold → orange → dark amber → near-black
+      // Color: pure white photon ring → pink-white → gold → orange → dark amber → near-black
       '  vec3 col;',
-      '  if(t < 0.02){ float u=t/0.02; col=mix(vec3(1.00,1.00,1.00),vec3(1.00,0.88,0.95),u); }',
-      '  else if(t < 0.07){ float u=(t-0.02)/0.05; col=mix(vec3(1.00,0.88,0.95),vec3(1.00,0.70,0.18),u); }',
-      '  else if(t < 0.18){ float u=(t-0.07)/0.11; col=mix(vec3(1.00,0.70,0.18),vec3(0.95,0.42,0.05),u); }',
-      '  else if(t < 0.38){ float u=(t-0.18)/0.20; col=mix(vec3(0.95,0.42,0.05),vec3(0.62,0.20,0.02),u); }',
-      '  else if(t < 0.62){ float u=(t-0.38)/0.24; col=mix(vec3(0.62,0.20,0.02),vec3(0.28,0.09,0.01),u); }',
-      '  else{ float u=(t-0.62)/0.38; col=mix(vec3(0.28,0.09,0.01),vec3(0.05,0.01,0.00),u); }',
-      // Steep radial falloff — outer disk nearly invisible to prevent ambient bleed
-      '  float bright = pow(max(1.0-t, 0.0), 2.5) * 6.0;',
+      '  if(t < 0.03){ float u=t/0.03; col=mix(vec3(1.00,1.00,1.00),vec3(1.00,0.88,0.94),u); }',
+      '  else if(t < 0.10){ float u=(t-0.03)/0.07; col=mix(vec3(1.00,0.88,0.94),vec3(1.00,0.68,0.15),u); }',
+      '  else if(t < 0.25){ float u=(t-0.10)/0.15; col=mix(vec3(1.00,0.68,0.15),vec3(0.95,0.40,0.04),u); }',
+      '  else if(t < 0.50){ float u=(t-0.25)/0.25; col=mix(vec3(0.95,0.40,0.04),vec3(0.55,0.16,0.01),u); }',
+      '  else if(t < 0.75){ float u=(t-0.50)/0.25; col=mix(vec3(0.55,0.16,0.01),vec3(0.20,0.06,0.01),u); }',
+      '  else{ float u=(t-0.75)/0.25; col=mix(vec3(0.20,0.06,0.01),vec3(0.04,0.01,0.00),u); }',
+      // Steep radial falloff — outer disk very dim to prevent ambient bleed
+      '  float bright = pow(max(1.0-t, 0.0), 2.5) * 2.5;',
       // Photon ring: tight Gaussian at inner edge — razor-thin searing white wire
       '  float innerDist = max(0.0, vRadius - uInnerR);',
-      '  float sigma = uInnerR * 0.12;',
-      '  float pBoost = 1.0 + 55.0 * exp(-(innerDist*innerDist) / (2.0*sigma*sigma));',
-      // 4-frequency log-sine banding — dozens of concentric rings, min 0.15 (never black-gaps)
+      '  float sigma = uInnerR * 0.10;',
+      '  float pBoost = 1.0 + 60.0 * exp(-(innerDist*innerDist) / (2.0*sigma*sigma));',
+      // 4-frequency log-sine banding — ~20 concentric rings, min 0.15 (never black-gaps)
       '  float logR = log(max(vRadius / max(uInnerR, 0.001), 1.001));',
-      '  float b1 = 0.5 + 0.5*sin(logR*3.5);',
-      '  float b2 = 0.5 + 0.5*sin(logR*8.0 + 1.0);',
-      '  float b3 = 0.5 + 0.5*sin(logR*17.0 + 0.5);',
-      '  float b4 = 0.5 + 0.5*sin(logR*35.0 + 1.8);',
+      '  float b1 = 0.5 + 0.5*sin(logR*6.0);',
+      '  float b2 = 0.5 + 0.5*sin(logR*15.0 + 1.0);',
+      '  float b3 = 0.5 + 0.5*sin(logR*35.0 + 0.5);',
+      '  float b4 = 0.5 + 0.5*sin(logR*75.0 + 1.8);',
       '  float bands = 0.15 + 0.42*b1 + 0.25*b2 + 0.12*b3 + 0.06*b4;',
-      // Doppler beaming — smooth cosine, zero spikes
-      '  float doppler = 0.55 + 0.45 * cos(vAngle);',
+      // Doppler beaming — strong asymmetry: approaching side 3.3× brighter than receding
+      '  float doppler = max(0.0, 0.30 + 0.70 * cos(vAngle));',
       '  float alpha = clamp(bright * bands * doppler * pBoost, 0.0, 1.0);',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
@@ -639,11 +639,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     // Single flat disk — 512 angular segments, 1 radial segment.
     // 1 radial segment = geometrically impossible to appear as a torus.
     // This is a 2D plane with zero vertical thickness.
-    var diskGeo = new THREE.RingGeometry(bhR * 0.130, bhR * 18.0, 512, 1);
+    var diskGeo = new THREE.RingGeometry(bhR * 2.1, bhR * 6.5, 512, 1);
     var diskMat = new THREE.ShaderMaterial({
       uniforms: {
-        uInnerR: { value: bhR * 0.130 },
-        uOuterR: { value: bhR * 18.0 }
+        uInnerR: { value: bhR * 2.1 },
+        uOuterR: { value: bhR * 6.5 }
       },
       vertexShader:   diskVert,
       fragmentShader: diskFrag,
@@ -661,7 +661,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
 
     // Event horizon — pure black sphere. No Fresnel/reflections: a black hole emits nothing.
     // The lensing shader's shadow mask reinforces the hard black cutoff in screen space.
-    bhEHRadius = bhR * 0.135; // store for dynamic lensing computation — slightly larger than disk inner edge (0.130) to cover white dot
+    bhEHRadius = bhR * 1.8; // large sphere: dominates composition at ~40% of disk width
     var ehGeo = new THREE.SphereGeometry(bhEHRadius, 64, 64);
     var ehMat = new THREE.MeshBasicMaterial({
       color: 0x000000,
@@ -685,7 +685,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     var _lensUniforms = {
       tDiffuse:  { value: null },
       uCenter:   { value: new THREE.Vector2(0.5, 0.5) },
-      uStrength: { value: 0.10 },
+      uStrength: { value: 0.18 },
       uInnerR:   { value: 0.03 },
       uOuterR:   { value: 0.12 },
       uShadowR:  { value: 0.06 },
@@ -714,18 +714,19 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         '    uv-=dir*warp; uv=clamp(uv,0.001,0.999);',
         '  }',
         '  vec4 col=texture2D(tDiffuse,uv);',
-        // Einstein arc — disk light bent over the NORTH POLE; constrained to upper screen hemisphere
-        // aboveCenter fades from 0 (below BH) to 1 (1× shadowR above BH)
-        '  float aboveCenter=smoothstep(-uShadowR*0.3,uShadowR*1.0,vUv.y-uCenter.y);',
-        '  float arcW=smoothstep(uShadowR*1.7,uShadowR*1.02,dist)*smoothstep(uShadowR*0.97,uShadowR*1.16,dist);',
+        // Einstein arc — disk light lensed over the NORTH POLE; upper hemisphere only
+        // aboveCenter transitions 0→1 from below BH center to 1 shadowR above it
+        '  float aboveCenter=smoothstep(-uShadowR*0.5,uShadowR*0.8,vUv.y-uCenter.y);',
+        // Thin band just outside shadow boundary — the gap between shadow and disk inner edge
+        '  float arcW=smoothstep(uShadowR*1.3,uShadowR*1.00,dist)*smoothstep(uShadowR*0.97,uShadowR*1.09,dist);',
         '  arcW*=aboveCenter;',
         '  if(arcW>0.001){',
-        // mDir points AWAY from current pixel toward BH — samples disk on the opposite (back) side
+        // mDir points TOWARD center — samples disk on back side (opposite to current pixel direction)
         '    vec2 mDir=-d/max(dist,0.001);',
         '    vec2 arcUv=uCenter+mDir*(uShadowR*1.9)/vec2(uAspect,1.0);',
         '    arcUv=clamp(arcUv,0.001,0.999);',
         '    vec4 arcSample=texture2D(tDiffuse,arcUv);',
-        '    col+=arcSample*arcW*5.0;',
+        '    col+=arcSample*arcW*7.0;',
         '  }',
         '  gl_FragColor=col;',
         '}'
@@ -3066,18 +3067,23 @@ function animate(){
     bhOrigOutputEncoding = renderer.outputEncoding;
     bhOrigClearColor     = renderer.getClearColor(new THREE.Color()).getHex();
     renderer.toneMapping         = THREE.ReinhardToneMapping;
-    renderer.toneMappingExposure = 0.88;
+    renderer.toneMappingExposure = 1.2;
     renderer.outputEncoding      = THREE.sRGBEncoding;
-    renderer.setClearColor(0x000000, 1); // pure black — prevents bloom from picking up blue tint
+    renderer.setClearColor(0x000000, 1); // pure black background
     _bhSavedVisibility = new Map();
     const _bhTree = new Set();
     if (blackHoleModel) blackHoleModel.traverse(function(o) { _bhTree.add(o); });
     scene.traverse(function(obj) {
       if (obj === scene) return;
       _bhSavedVisibility.set(obj, obj.visible);
-      // Keep galaxySkybox visible — it provides the static 8K star background
+      // Keep galaxySkybox visible — provides the star background
       if (!_bhTree.has(obj) && obj !== galaxySkybox) obj.visible = false;
     });
+    // Dim the Milky Way texture to near-black so the prominent galactic band
+    // doesn't get warped by the lensing pass into a visible streak
+    if (galaxySkybox && galaxySkybox.material) {
+      galaxySkybox.material.color.setScalar(0.05);
+    }
     if (bhPointLight)  bhPointLight.visible  = true;
     if (bhPointLight2) bhPointLight2.visible = true;
     if (bhPointLight3) bhPointLight3.visible = true;
@@ -3093,6 +3099,10 @@ function animate(){
     if (_bhSavedVisibility) {
       _bhSavedVisibility.forEach(function(wasVisible, obj) { obj.visible = wasVisible; });
       _bhSavedVisibility = null;
+    }
+    // Restore galaxySkybox to full brightness
+    if (galaxySkybox && galaxySkybox.material) {
+      galaxySkybox.material.color.setScalar(1.0);
     }
     bhRendererSettings = false;
   }
