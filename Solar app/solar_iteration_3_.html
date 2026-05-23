@@ -603,6 +603,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
 
     var diskFrag = [
       'uniform float uInnerR, uOuterR, uTime;',
+      'uniform vec2 uCamDir;',
       'varying float vRadius, vAngle;',
       'void main(){',
       '  float t = clamp((vRadius - uInnerR) / (uOuterR - uInnerR), 0.0, 1.0);',
@@ -624,14 +625,20 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float b1 = 0.5 + 0.5*sin(logR*6.0);',
       '  float b2 = 0.5 + 0.5*sin(logR*15.0 + 1.0);',
       '  float bands = 0.40 + 0.38*b1 + 0.22*b2;',
-      // Azimuthal orbital arcs — n=8 and n=5 bright arcs orbit each ring (Keplerian: inner faster).
-      // From any above-angle camera, the near-side arcs project as horizontal left-to-right streaks.
-      // max(cos,0) gives sharp bright peaks separated by dark gaps — distinct "lines" per layer.
-      '  float kep = clamp(pow(uInnerR / max(vRadius, uInnerR * 0.05), 1.5), 0.0, 1.0);',
-      '  float spd = 0.30 + 0.70 * kep;',
-      '  float s1 = cos(8.0*vAngle - uTime * 1.30 * spd);',
-      '  float s2 = cos(5.0*vAngle - uTime * 0.88 * spd + 1.2);',
-      '  float swirl = 0.55 + 0.28*max(s1, 0.0) + 0.17*max(s2, 0.0);',
+      // Doppler asymmetry: near side (facing camera) is bright, far side is dim.
+      // This is physically correct and prevents dark "shadow" patches from being lensed above the BH.
+      // uCamDir = direction from disk center toward camera, in local XY (= world XZ) coords.
+      '  vec2 diskDir = vec2(cos(vAngle), sin(vAngle));',
+      '  float nearness = dot(diskDir, uCamDir);',
+      '  float doppler = 0.20 + 0.80 * (nearness * 0.5 + 0.5);',
+      // Keplerian orbital arcs — inner rings orbit faster. On the near side they appear as
+      // left-to-right flowing lines; on the dim far side they are nearly invisible.
+      '  float kep = clamp(pow(uInnerR / max(vRadius, uInnerR * 0.05), 0.75), 0.0, 1.0);',
+      '  float spd = 0.40 + 0.60 * kep;',
+      '  float a4 = 0.5 + 0.5*cos(4.0*vAngle - uTime * 2.5 * spd);',
+      '  float a2 = 0.5 + 0.5*cos(2.0*vAngle - uTime * 1.5 * spd + 0.9);',
+      '  float orb = 0.45 + 0.35*a4 + 0.20*a2;',
+      '  float swirl = orb * doppler;',
       '  float alpha = clamp(bright * bands * swirl * pBoost, 0.0, 1.0);',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
@@ -647,9 +654,10 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     var diskGeo = new THREE.RingGeometry(bhR * 0.92, bhR * 10.0, 512, 1);
     var diskMat = new THREE.ShaderMaterial({
       uniforms: {
-        uInnerR: { value: bhR * 0.92 },
-        uOuterR: { value: bhR * 10.0 },
-        uTime:   { value: 0.0 }
+        uInnerR:  { value: bhR * 0.92 },
+        uOuterR:  { value: bhR * 10.0 },
+        uTime:    { value: 0.0 },
+        uCamDir:  { value: new THREE.Vector2(0.0, 1.0) }
       },
       vertexShader:   diskVert,
       fragmentShader: diskFrag,
@@ -3023,6 +3031,11 @@ function animate(){
       blackHoleModel.visible = bhTransitionT > 0.05;
     }
     if (bhDiskMesh && bhTransitionT > 0) {
+      // Update camera direction: which side of the disk faces the camera (for Doppler brightening)
+      var _ctd = new THREE.Vector3().subVectors(camera.position, galacticCorePos);
+      _ctd.y = 0;
+      if (_ctd.length() > 0.001) _ctd.normalize(); else _ctd.set(0, 0, 1);
+      bhDiskMesh.material.uniforms.uCamDir.value.set(_ctd.x, _ctd.z);
       bhDiskMesh.material.uniforms.uTime.value += deltaMs * 0.0025;
     }
   }
