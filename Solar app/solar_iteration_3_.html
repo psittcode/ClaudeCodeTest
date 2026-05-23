@@ -613,13 +613,13 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  else if(t < 0.52){ float u=(t-0.28)/0.24; col=mix(vec3(0.95,0.42,0.05),vec3(0.60,0.18,0.02),u); }',
       '  else if(t < 0.76){ float u=(t-0.52)/0.24; col=mix(vec3(0.60,0.18,0.02),vec3(0.22,0.07,0.01),u); }',
       '  else{ float u=(t-0.76)/0.24; col=mix(vec3(0.22,0.07,0.01),vec3(0.05,0.01,0.00),u); }',
-      // Photon ring: very tight Gaussian — razor-thin paper-white wire at inner edge
+      // Photon ring: wider warm glow — blends into the disk, not a harsh white outline
       '  float innerDist = max(0.0, vRadius - uInnerR);',
-      '  float sigma = uInnerR * 0.05;',
+      '  float sigma = uInnerR * 0.10;',
       '  float pr = exp(-(innerDist*innerDist) / (2.0*sigma*sigma));',
-      '  float pBoost = 1.0 + 80.0 * pr;',
-      // Blend disk color toward brilliant white at photon ring zone
-      '  col = mix(col, vec3(1.0,1.0,1.0), pr * 0.85);',
+      '  float pBoost = 1.0 + 14.0 * pr;',
+      // Blend toward warm amber-white so the ring glows, not burns
+      '  col = mix(col, vec3(1.0,0.92,0.68), pr * 0.60);',
       // Moderate radial falloff — outer disk stays visible with clear ring structure
       '  float bright = pow(max(1.0-t, 0.0), 1.8) * 1.8;',
       // 4-frequency log-sine banding — ~50 concentric rings, min 0.15
@@ -665,13 +665,30 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     diskMesh.layers.set(0);
     bhSpin.add(diskMesh);
 
-    // Soft orange atmospheric glow — wide volumetric sphere around disk
-    var bhGlowMesh = new THREE.Mesh(
-      new THREE.SphereGeometry(bhR * 6, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.12, depthWrite: false, blending: THREE.AdditiveBlending })
-    );
-    bhGlowMesh.renderOrder = 10;
-    bhSpin.add(bhGlowMesh);
+    // Soft orange glow — camera-facing sprite with radial gradient (sphere would be invisible
+    // because the camera is always inside the glow radius in BH mode, culling all front faces)
+    (function() {
+      var _gc = document.createElement('canvas');
+      _gc.width = _gc.height = 256;
+      var _gx = _gc.getContext('2d');
+      var _gr = _gx.createRadialGradient(128,128,0,128,128,128);
+      _gr.addColorStop(0,    'rgba(255,150,20,0.75)');
+      _gr.addColorStop(0.30, 'rgba(255,90,5,0.40)');
+      _gr.addColorStop(0.60, 'rgba(200,45,0,0.15)');
+      _gr.addColorStop(1.0,  'rgba(140,20,0,0)');
+      _gx.fillStyle = _gr;
+      _gx.fillRect(0, 0, 256, 256);
+      var _gSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(_gc),
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false
+      }));
+      _gSprite.scale.set(bhR * 24, bhR * 24, 1);
+      _gSprite.renderOrder = 15;
+      bhSpin.add(_gSprite);
+    })();
 
     // Event horizon radius used for dynamic shadow calculation.
     // No sphere mesh: the lensing shader shadow mask IS the event horizon — eliminates
@@ -732,23 +749,32 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
         'void main(){',
         '  vec2 d=(vUv-uCenter)*vec2(uAspect,1.0);',
         '  float dist=length(d);',
-        // Event horizon: pure black (no reflection to avoid seam artifacts)
+        // Event horizon: solid black
         '  if(dist<uShadowR*0.97){ gl_FragColor=vec4(0.0,0.0,0.0,1.0); return; }',
-        // Gravitational warp — smooth exponential decay, NO hard outer boundary (prevents seam line)
+        // Gravitational warp — smooth Gaussian, no hard threshold (eliminates seam-line artifacts)
         '  vec2 uv=vUv;',
         '  float warpMag=uStrength*uShadowR*exp(-pow((dist/uShadowR-1.0)*2.2,2.0));',
-        '  if(warpMag>0.0001){',
-        '    vec2 dir=d/max(dist,0.001); dir.x/=uAspect;',
-        '    uv-=dir*warpMag; uv=clamp(uv,0.001,0.999);',
-        '  }',
+        '  vec2 dir=d/max(dist,0.001); dir.x/=uAspect;',
+        '  uv-=dir*warpMag; uv=clamp(uv,0.001,0.999);',
         '  vec4 col=texture2D(tDiffuse,uv);',
-        // Photon ring — soft Gaussian, wider sigma, warm amber glow, strong upper-hemisphere bias
-        '  float prD=(dist-uShadowR)/(uShadowR*0.055);',
+        // Secondary lensing: disk-over-sphere — mirror-sample from below so disk appears to wrap
+        // above the event horizon from any side-on viewing angle
+        '  float arcDist=dist-uShadowR;',
+        '  float yFade=smoothstep(0.0,uShadowR*0.2,d.y);',
+        '  if(arcDist>0.0&&arcDist<uShadowR*1.6&&yFade>0.0){',
+        '    vec2 mirUv=uCenter+vec2(d.x,-d.y)/vec2(uAspect,1.0);',
+        '    mirUv=clamp(mirUv,0.001,0.999);',
+        '    vec4 mirCol=texture2D(tDiffuse,mirUv);',
+        '    float arcStr=exp(-arcDist/(uShadowR*0.4))*(d.y/max(dist,0.001))*yFade;',
+        '    col.rgb=mix(col.rgb,mirCol.rgb*1.5,clamp(arcStr,0.0,0.65));',
+        '  }',
+        // Photon ring + warm halo — soft bloom around shadow edge
+        '  float prD=(dist-uShadowR)/(uShadowR*0.06);',
         '  float prRing=exp(-prD*prD);',
-        '  float haloD=(dist-uShadowR)/(uShadowR*0.22);',
-        '  float halo=exp(-haloD*haloD)*0.35;',
+        '  float haloD=(dist-uShadowR)/(uShadowR*0.28);',
+        '  float halo=exp(-haloD*haloD)*0.28;',
         '  float yUp=clamp(d.y/max(dist,0.001)*0.5+0.5,0.0,1.0);',
-        '  col.rgb+=vec3(1.0,0.85,0.45)*(prRing+halo)*(4.0+14.0*yUp);',
+        '  col.rgb+=vec3(1.0,0.78,0.35)*(prRing+halo)*(3.0+8.0*yUp);',
         '  gl_FragColor=col;',
         '}'
       ].join('\n')
@@ -3337,10 +3363,13 @@ function animate(){
   }
 
   if (bhRendererSettings && finalComposer) {
-    // Update lensing uniforms every frame
+    // Lock orbit pivot first — camera must be stable before we project uCenter
+    if (galacticCorePos) {
+      controls.target.copy(galacticCorePos);
+      controls.update();
+    }
+    // Update lensing uniforms with the now-stable camera state
     if (bhLensingUniforms && galacticCorePos) {
-      // Use galacticCorePos directly — static world position, no scene-graph traversal needed.
-      // This guarantees the shadow mask center matches the disk's rendered center every frame.
       _bhScreenPos.copy(galacticCorePos);
       if (bhEHRadius > 0) {
         var _camToBH = camera.position.distanceTo(galacticCorePos);
@@ -3355,11 +3384,6 @@ function animate(){
         (_bhScreenPos.x + 1.0) * 0.5,
         (_bhScreenPos.y + 1.0) * 0.5
       );
-    }
-    // Lock orbit pivot to BH center — prevents sphere from jumping on fast mouse movement
-    if (galacticCorePos) {
-      controls.target.copy(galacticCorePos);
-      controls.update();
     }
     finalComposer.render();
   } else {
