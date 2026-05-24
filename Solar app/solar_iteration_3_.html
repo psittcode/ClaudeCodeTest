@@ -2474,12 +2474,14 @@ function enterGalacticView() {
       beauGaDisc.scale.setScalar(f);
       beauGaDisc.position.set(0, 0, 0);
     }
-    if (milkyWayModel) {
-      galSavedMilkyWayScale = milkyWayModel.scale.clone();
-      galSavedMilkyWayPos   = milkyWayModel.position.clone();
-      const newMWPos = milkyWayModel.position.clone().sub(galacticCorePos).multiplyScalar(f);
-      milkyWayModel.scale.multiplyScalar(f);
-      milkyWayModel.position.copy(newMWPos);
+    if (galaxyPivot) {
+      // Save and reposition the pivot itself (not milkyWayModel — its local offset is correct).
+      // Moving the pivot to world origin + scaling by f centers the GLB at (0,0,0)
+      // with radius 400, matching the galactic-view coordinate system.
+      galSavedMilkyWayScale = galaxyPivot.scale.clone();
+      galSavedMilkyWayPos   = galaxyPivot.position.clone();
+      galaxyPivot.position.set(0, 0, 0);
+      galaxyPivot.scale.setScalar(f);
     }
   }
 
@@ -2538,9 +2540,9 @@ function enterGalacticView() {
 }
 
 function _restoreGalaxyScale() {
-  if (galSavedMilkyWayScale && milkyWayModel) {
-    milkyWayModel.scale.copy(galSavedMilkyWayScale);
-    milkyWayModel.position.copy(galSavedMilkyWayPos);
+  if (galSavedMilkyWayScale && galaxyPivot) {
+    galaxyPivot.scale.copy(galSavedMilkyWayScale);
+    galaxyPivot.position.copy(galSavedMilkyWayPos);
     galSavedMilkyWayScale = null;
     galSavedMilkyWayPos   = null;
   }
@@ -3237,17 +3239,10 @@ function animate(){
   if (bhStarfield) bhStarfield.position.copy(camera.position);
   solarSystemMarker.visible = !bhRendererSettings && outsideSkybox && !galacticViewActive;
 
-  // Galaxy spin — rate depends on active view:
-  //   Milky Way page: locked to Uranus's orbital speed (0.000000395 rad/frame at 60fps)
-  //   Galactic view:  tied to galacticSpeed slider (same rate as sun marker orbit),
-  //                   paused when galPaused is true
+  // Galaxy spin — same slow rate in all views, tied to planet speed slider.
+  // Paused during fly-to animations, and also when galPaused is active in galactic view.
   if (!isFlyingTo && !(galacticViewActive && galPaused)) {
-    var _galaxySpin;
-    if (galacticViewActive) {
-      _galaxySpin = ((galacticSpeed * speed) / 225) * Math.PI * 2 * (deltaMs / 1000);
-    } else {
-      _galaxySpin = 0.000000395 * speed * deltaScale;
-    }
+    var _galaxySpin = 0.000000395 * speed * deltaScale;
     if (galaxyPivot) galaxyPivot.rotation.y += _galaxySpin;
     if (beauGaDisc)  beauGaDisc.rotateOnWorldAxis(_galaxyAxis, _galaxySpin);
   }
