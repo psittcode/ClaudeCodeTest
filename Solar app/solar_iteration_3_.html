@@ -630,8 +630,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float rotAng = vAngle - uTime * 0.18;',
       '  vec2  pBase  = vec2(vRadius*cos(rotAng), vRadius*sin(rotAng)) / max(uInnerR * 0.55, 0.001);',
       '  vec2  pCloud = pBase + vec2(uLayerY * 0.6, uLayerY * 0.4);',
-      '  float cloud  = fbm4(pCloud);',
-      '  float grain  = vnoise(pCloud * 11.0);',
+      '  float cloud   = fbm4(pCloud);',
+      '  float grain   = vnoise(pCloud * 11.0);',
+      // grainHi at very high frequency — features so small the disk's
+      // rotation can't form visible arc stripes, only "boiling" texture.
+      '  float grainHi = vnoise(pCloud * 32.0);',
       // === Dual ring sets — ~80 rings with non-uniform clustering ===
       // Two ring sets at spacings 0.030 and 0.044 in logR (was 0.14 / 0.20).
       // Set 1 -> ~80 rings, set 2 -> ~55 rings. They drift in and out of
@@ -664,6 +667,14 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       // Arc patchiness — narrowed (0.40+0.60 -> 0.60+0.40) so the dim end
       // of the cloud range doesn't drop rings below the bleed floor.
       '  ringMaskHard *= 0.60 + 0.40 * cloud;',
+      // Grainy / cloud-like ring profile — multiplying by high-frequency
+      // grainHi breaks the smooth Gaussian "rubber band" profile into
+      // stippled cloud texture. grainHi features are so small that the
+      // disk rotation can't form visible arc stripes — the grain reads as
+      // consistent boiling cloud detail around the entire disk.
+      // Range narrowed to 0.65-1.00 so the dimmest ring (hash 0.45 * cloud
+      // 0.60 * grain 0.65 = 0.176) still pops above the bleed floor (0.15).
+      '  ringMaskHard *= 0.65 + 0.35 * grainHi;',
       // === Uniform bleed — gentle gap-fill, ring peaks stay clearly above ===
       // Floor dropped 0.35 -> 0.15. With ring peak minimum now ~0.27
       // (0.45 hash * 0.60 cloud), every ring is ~1.8x brighter than the
