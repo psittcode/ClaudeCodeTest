@@ -632,32 +632,44 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  vec2  pCloud = pBase + vec2(uLayerY * 0.6, uLayerY * 0.4);',
       '  float cloud  = fbm4(pCloud);',
       '  float grain  = vnoise(pCloud * 11.0);',
-      // === Dual ring sets — non-uniform clustering ===
-      // Two ring sets at slightly different spacings (0.020 and 0.028). They
-      // drift in and out of alignment across the radial range, so in some
-      // regions a ring from each set lands close together (visually
-      // "grouped" / almost touching) and in others they're well separated
-      // (visible gaps). Natural clustering without per-ring offsets.
-      '  float perturbLogR = logR + 0.025 * sin(logR * 7.0 + 1.0);',
-      '  float ringSpacing1 = 0.020;',
+      // === Dual ring sets — 25-35 rings with non-uniform clustering ===
+      // Two ring sets at spacings 0.14 and 0.20 in logR. They drift in and
+      // out of alignment so some rings land close together (grouped) and
+      // others sit well apart (visible gap).
+      '  float perturbLogR  = logR + 0.04 * sin(logR * 5.0 + 1.0);',
+      '  float ringSpacing1 = 0.14;',
       '  float ringInput1   = perturbLogR / ringSpacing1 + uLayerY * 0.04;',
       '  float ringDist1    = min(fract(ringInput1), 1.0 - fract(ringInput1));',
-      // Gaussian K=7 — slightly wider/thicker rings than before (K=10)
-      '  float ring1 = exp(-ringDist1 * ringDist1 * 7.0);',
-      '  float ringSpacing2 = 0.028;',
+      '  float ringSpacing2 = 0.20;',
       '  float ringInput2   = perturbLogR / ringSpacing2 + uLayerY * 0.06 + 0.3;',
       '  float ringDist2    = min(fract(ringInput2), 1.0 - fract(ringInput2));',
-      '  float ring2 = exp(-ringDist2 * ringDist2 * 7.0);',
-      '  float ringMaskHard = max(ring1, ring2);',
-      // Per-ring opacity — narrower range (0.65-0.95) so no ring drops dim
-      // enough to look like a shadow strip against its neighbours.
+      // === Core + halo per ring (canvas "shadowBlur" emulation) ===
+      // Narrow bright core (K=80) + wider warm halo. Halo K varies with t:
+      // tighter at the inner edge (haloK=12 -> bigger blur, like
+      // shadowBlur:30 for the brightest inner rings) and looser further out
+      // (haloK=30 -> smaller blur, like shadowBlur:15-25 outer rings).
+      '  float core1 = exp(-ringDist1 * ringDist1 * 80.0);',
+      '  float core2 = exp(-ringDist2 * ringDist2 * 80.0);',
+      '  float haloK = mix(12.0, 30.0, smoothstep(0.0, 0.5, t));',
+      '  float halo1 = exp(-ringDist1 * ringDist1 * haloK);',
+      '  float halo2 = exp(-ringDist2 * ringDist2 * haloK);',
+      '  float coreMask = max(core1, core2);',
+      '  float haloMask = max(halo1, halo2);',
+      '  float ringMaskHard = max(coreMask, haloMask * 0.40);',
+      // Per-ring opacity 0.30-0.90 (restored to user spec). With the dual
+      // ring sets giving visible gaps, the dim end now reads as a "dim
+      // ring", not as a shadow-strip cutting through bright neighbours.
       '  float ringIndex = floor(ringInput1 + 0.5);',
-      '  float ringOpVar = 0.65 + 0.30 * hash21(vec2(ringIndex * 0.7, 3.0));',
+      '  float ringOpVar = 0.30 + 0.60 * hash21(vec2(ringIndex * 0.7, 3.0));',
       '  ringMaskHard *= ringOpVar;',
-      // Softer cloud modulation — minimum lifted 0.12 -> 0.55 so low-cloud
-      // patches no longer read as dark "shadow strips" cutting through the
-      // disk. Cloud still varies the brightness but in a much narrower range.
-      '  ringMaskHard *= 0.55 + 0.45 * cloud;',
+      // Arc patchiness — brightness varies along each ring's arc via cloud
+      // (NOT uniform all the way around the ring).
+      '  ringMaskHard *= 0.40 + 0.60 * cloud;',
+      // === Soft haze base — diffuse glow behind rings (max alpha ~0.06) ===
+      // Ensures ringMask never drops below this faint base level inside the
+      // disk, giving the elliptical area a subtle ambient luminosity.
+      '  float baseHaze = 0.06 * (1.0 - smoothstep(0.0, 0.95, t));',
+      '  ringMaskHard = max(ringMaskHard, baseHaze);',
       // === Outer fog transition ===
       // For t > 0.65 the rings dissolve smoothly into a diffuse fog layer.
       // fogMix=0 -> pure ring-gated alpha; fogMix=1 -> pure cloud-driven fog.
@@ -680,18 +692,20 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       // Cloud + grain — subtle brightness variation, no hue change
       '  col *= (0.85 + 0.20 * cloud);',
       '  col *= (0.92 + 0.16 * grain);',
-      // === Inner Planckian boost (alpha only — preserves the colour gradient) ===
+      // === Inner Planckian boost — applied to colour (not alpha) so the
+      // per-ring opacity hash (0.30-0.90) doesn't saturate inside the cap
+      // at the inner edge where pBoost would otherwise blow alpha to 1.
       '  float innerDist = max(0.0, vRadius - uInnerR);',
       '  float sigma     = uInnerR * 0.10;',
       '  float pr        = exp(-(innerDist*innerDist) / (2.0*sigma*sigma));',
-      '  float pBoost    = 1.0 + 6.0 * pr;',
-      // === Alpha — radial falloff × ring mask × pBoost ===
-      // Per-layer cap dropped 0.50 -> 0.35 — rings are very transparent
-      // individually, so the disk reads as a soft luminous fog with
-      // ring structure only as gentle intensity ripples within it.
-      '  float bright = pow(max(1.0-t, 0.0), 1.3) * 1.6;',
-      '  float alpha  = clamp(effMask * bright * pBoost, 0.0, 1.0);',
-      '  alpha = min(alpha, 0.35);',
+      '  col *= 1.0 + 0.8 * pr;',
+      // === Alpha — radial falloff × ring mask ===
+      // Cap raised 0.35 -> 0.55 so the 0.30-0.90 per-ring opacity hash
+      // actually translates to visible brightness variation across rings
+      // instead of all saturating against a low ceiling.
+      '  float bright = pow(max(1.0-t, 0.0), 1.3) * 1.4;',
+      '  float alpha  = clamp(effMask * bright, 0.0, 1.0);',
+      '  alpha = min(alpha, 0.55);',
       '  alpha *= uAlphaMul;',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
