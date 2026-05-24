@@ -2119,6 +2119,8 @@ function flyToObject(obj) {
 window.addEventListener("click", e => {
   // Ignore clicks on UI elements — only handle canvas clicks
   if (e.target !== renderer.domElement) return;
+  // Raycaster only meaningful in solar-system view
+  if (galacticViewActive || spaceshipViewActive) return;
 
   mouse.x = (e.clientX / innerWidth) * 2 - 1;
   mouse.y = -(e.clientY / innerHeight) * 2 + 1;
@@ -2305,8 +2307,8 @@ const GAL_R            = 280;                          // visual orbit radius (s
 const GAL_Z_MAX        = 22;                           // vertical bob amplitude (exaggerated)
 const GAL_OSC_RATIO    = 2.7;                          // oscillations per galactic orbit
 const GAL_TILT         = 60.2 * Math.PI / 180;        // ecliptic tilt vs galactic plane
-const GAL_BH_FAR       = 60;                           // distance to centre where BH starts fading in
-const GAL_BH_CLOSE     = 8;                            // distance where BH is fully visible
+const GAL_BH_FAR       = 50;                           // distance to centre where BH starts fading in
+const GAL_BH_CLOSE     = 6;                            // distance where BH is fully visible (inside disk)
 const GALACTIC_YEAR_MS = 225e6 * 365.25 * 86400000;   // ms per galactic year
 
 const galacticGroup = new THREE.Group();
@@ -2577,7 +2579,6 @@ function exitGalacticView() {
   if (blackHoleModel && galacticCorePos) {
     blackHoleModel.position.copy(galacticCorePos);
     blackHoleModel.scale.set(1, 1, 1);
-    blackHoleModel.quaternion.identity(); // restore XZ-flat orientation for Milky Way view
     blackHoleModel.visible = false;
   }
   if (beauGaDisc) { beauGaDisc.material.opacity = 1.0; beauGaDisc.material.needsUpdate = true; }
@@ -3385,9 +3386,10 @@ function animate(){
   // ── End black hole transition ─────────────────────────────────────────────
 
   // ── Galactic view — black hole zoom-in ────────────────────────────────────
-  // Galactic centre is at world (0,0,0) while galacticViewActive. When the camera
-  // gets within GAL_BH_FAR units, fade in the BH model (scaled to galactic-view
-  // size) + show procedural starfield, fade out the galaxy disc.
+  // Mirror the Milky Way BH transition: disk outer radius = 20 galactic units,
+  // GAL_BH_CLOSE = 6 → camera is inside the disk at full zoom, same immersive
+  // experience as the Milky Way view. No quaternion rotation — keep disk flat
+  // in XZ just like the Milky Way BH; close-range immersion handles the look.
   if (galacticViewActive && galaxyVisualRadius > 0 && blackHoleModel) {
     const _galCamDist = camera.position.length();
     const _galRaw = 1.0 - Math.max(0.0, Math.min(1.0,
@@ -3395,23 +3397,13 @@ function animate(){
     ));
     galBHTransitionT += (_galRaw - galBHTransitionT) * 0.05;
 
-    // Scale so disk outer radius = 12 galactic-view units
-    const _galF = 12.0 / (galaxyVisualRadius * 0.4);
+    // Scale: target disk outer radius = 20 galactic-view units.
+    // bhR * 10 = galaxyVisualRadius * 0.4, so _galF = 20 / (galaxyVisualRadius * 0.4)
+    const _galF = 20.0 / (galaxyVisualRadius * 0.4);
     blackHoleModel.position.set(0, 0, 0);
     blackHoleModel.scale.setScalar(_galF);
+    blackHoleModel.quaternion.identity();
     blackHoleModel.visible = galBHTransitionT > 0.04;
-
-    // Disk layers lie flat in XZ (rotation.x = -π/2 on each child).
-    // Viewed from the galactic camera above the plane they appear as a tilted
-    // ellipse — two separate arcs left/right. Fix: rotate the group so the
-    // disk's Y-axis normal always points toward the camera, making it appear
-    // as a circular ring regardless of camera position.
-    if (blackHoleModel.visible) {
-      const _camDir = camera.position.clone().normalize();
-      blackHoleModel.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0), _camDir
-      );
-    }
 
     if (bhDiskMaterials && blackHoleModel.visible) {
       const _gdt = deltaMs * 0.0005;
@@ -3431,14 +3423,10 @@ function animate(){
       beauGaDisc.material.opacity = Math.max(0.0, 1.0 - galBHTransitionT * 2.5);
       beauGaDisc.material.needsUpdate = true;
     }
-
-    // Procedural starfield provides a clean backdrop (no galactic band) in BH mode
     if (bhStarfield) bhStarfield.visible = galBHTransitionT > 0.1;
   } else if (!galacticViewActive && galBHTransitionT > 0) {
-    // Fade out when leaving galactic view (animate loop catches the cleanup frame)
     galBHTransitionT = 0;
   }
-  // Restore glow orb opacity when not transitioning (e.g. after pulling back)
   if (galacticViewActive && galBHTransitionT < 0.01 && galCentreSprite) {
     galCentreSprite.material.opacity = 1.0;
   }
@@ -3791,6 +3779,7 @@ const bodyList = [
 ];
 
 function showList() {
+  if (galacticViewActive || spaceshipViewActive) return;
   document.getElementById("panel").style.display = "block";
   document.getElementById("backToList").style.display = "none";
 
