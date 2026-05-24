@@ -656,21 +656,20 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float coreMask = max(core1, core2);',
       '  float haloMask = max(halo1, halo2);',
       '  float ringMaskHard = max(coreMask, haloMask * 0.40);',
-      // Per-ring opacity 0.30-0.90 (restored to user spec). With the dual
-      // ring sets giving visible gaps, the dim end now reads as a "dim
-      // ring", not as a shadow-strip cutting through bright neighbours.
+      // Per-ring opacity — narrowed to [0.45, 0.90] so the dimmest rings
+      // still pop visibly above the uniform bleed floor below.
       '  float ringIndex = floor(ringInput1 + 0.5);',
-      '  float ringOpVar = 0.30 + 0.60 * hash21(vec2(ringIndex * 0.7, 3.0));',
+      '  float ringOpVar = 0.45 + 0.45 * hash21(vec2(ringIndex * 0.7, 3.0));',
       '  ringMaskHard *= ringOpVar;',
-      // Arc patchiness — brightness varies along each ring's arc via cloud
-      // (NOT uniform all the way around the ring).
-      '  ringMaskHard *= 0.40 + 0.60 * cloud;',
-      // === Uniform bleed — gaps fill across the whole disk ===
-      // ringMaskHard floor of 0.35 applied unconditionally. Rings are now
-      // brighter ridges on top of a continuous luminous base rather than
-      // discrete filaments with empty gaps. No cloud gating, so no arc-
-      // shaped bleed patches that read as stripes.
-      '  ringMaskHard = max(ringMaskHard, 0.35);',
+      // Arc patchiness — narrowed (0.40+0.60 -> 0.60+0.40) so the dim end
+      // of the cloud range doesn't drop rings below the bleed floor.
+      '  ringMaskHard *= 0.60 + 0.40 * cloud;',
+      // === Uniform bleed — gentle gap-fill, ring peaks stay clearly above ===
+      // Floor dropped 0.35 -> 0.15. With ring peak minimum now ~0.27
+      // (0.45 hash * 0.60 cloud), every ring is ~1.8x brighter than the
+      // bleed floor — the "just right" gap visibility from the bright
+      // patches now applies across the entire disk, no solid-mass patches.
+      '  ringMaskHard = max(ringMaskHard, 0.15);',
       // === Soft haze base — diffuse glow behind rings (max alpha ~0.06) ===
       // Ensures ringMask never drops below this faint base level inside the
       // disk, giving the elliptical area a subtle ambient luminosity.
