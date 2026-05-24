@@ -2515,8 +2515,8 @@ function enterGalacticView() {
   document.getElementById('galSunTrailBtn').textContent = 'Hide Sun Trail';
   galGridVisible = true;
   galGrid.visible = true;
-  galPlane.visible = true;
-  document.getElementById('galGridBtn').textContent = 'Hide Grid & Plane';
+  galPlane.visible = false; // beauGaDisc is the actual galaxy disc in this view
+  document.getElementById('galGridBtn').textContent = 'Hide Grid';
   updateGalElapsedDisplay();
 
   document.getElementById('panel').style.display = 'none';
@@ -2922,9 +2922,9 @@ document.getElementById('galSunTrailBtn').onclick = () => {
 document.getElementById('galGridBtn').onclick = () => {
   galGridVisible = !galGridVisible;
   galGrid.visible = galGridVisible;
-  galPlane.visible = galGridVisible;
+  // galPlane stays hidden — beauGaDisc provides the galaxy backdrop
   document.getElementById('galGridBtn').textContent =
-    galGridVisible ? 'Hide Grid & Plane' : 'Show Grid & Plane';
+    galGridVisible ? 'Hide Grid' : 'Show Grid';
 };
 
 document.getElementById('galResetBtn').onclick = () => {
@@ -3237,15 +3237,17 @@ function animate(){
   if (bhStarfield) bhStarfield.position.copy(camera.position);
   solarSystemMarker.visible = !bhRendererSettings && outsideSkybox && !galacticViewActive;
 
-  // Galaxy spin — rate locked to Uranus's orbital speed (0.000000395
-  // rad/frame at 60fps in the planet simulation). Same simulation
-  // `speed` slider drives both, so when the user speeds up the planets
-  // the galaxy spin speeds up identically. The solarSystemMarker is
-  // parented under galaxyPivot so its position orbits along too.
-  // Paused during fly-to animations because the fly may be explicitly
-  // animating galaxyPivot back toward angle 0 (e.g. flyToSolarSystem).
-  if (!isFlyingTo) {
-    var _galaxySpin = 0.000000395 * speed * deltaScale;
+  // Galaxy spin — rate depends on active view:
+  //   Milky Way page: locked to Uranus's orbital speed (0.000000395 rad/frame at 60fps)
+  //   Galactic view:  tied to galacticSpeed slider (same rate as sun marker orbit),
+  //                   paused when galPaused is true
+  if (!isFlyingTo && !(galacticViewActive && galPaused)) {
+    var _galaxySpin;
+    if (galacticViewActive) {
+      _galaxySpin = ((galacticSpeed * speed) / 225) * Math.PI * 2 * (deltaMs / 1000);
+    } else {
+      _galaxySpin = 0.000000395 * speed * deltaScale;
+    }
     if (galaxyPivot) galaxyPivot.rotation.y += _galaxySpin;
     if (beauGaDisc)  beauGaDisc.rotateOnWorldAxis(_galaxyAxis, _galaxySpin);
   }
