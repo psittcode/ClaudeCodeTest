@@ -3466,17 +3466,8 @@ function animate(){
     blackHoleModel.position.set(0, 0, 0);
     blackHoleModel.scale.setScalar(_galF);
 
-    // One-time tilt: rotate the BH group so the disk (local normal = Y axis)
-    // faces the camera's current approach direction. Done once so the disk
-    // does NOT follow the camera as the user orbits.
-    if (!galBHDiskOriented && galBHTransitionT > 0.01) {
-      const _approachDir = camera.position.clone().normalize();
-      blackHoleModel.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        _approachDir
-      );
-      galBHDiskOriented = true;
-    }
+    // Keep disk flat (identity rotation) — horizontal XZ plane as created.
+    blackHoleModel.quaternion.identity();
 
     blackHoleModel.visible = galBHTransitionT > 0.04;
 
