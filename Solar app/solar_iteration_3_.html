@@ -2481,6 +2481,7 @@ galacticGroup.add(galSunTrail);
 let galacticViewActive  = false;
 let galBHTransitionT    = 0;   // 0 = no BH, 1 = full BH environment (galactic view only)
 let galBHOrigAlphaMuls  = null; // saved uAlphaMul values so we can restore on exit
+let galBHDiskOriented   = false; // true once BH disk quaternion has been set for this galactic session
 let galSavedCamPos      = null;
 let galSavedCamTarget   = null;
 let galSavedCamUp       = null;
@@ -2542,6 +2543,7 @@ function enterGalacticView() {
   lockedObject = null;
   galacticViewActive = true;
   galBHTransitionT = 0;
+  galBHDiskOriented = false;
   galPaused = false;
   galEarthZoomedIn = false;
   document.getElementById('seFromGalBtn').textContent = 'Spaceship Earth →';
@@ -2617,6 +2619,7 @@ function exitGalacticView() {
 
   // Reset galactic BH state — restores BH model to its Milky Way page position/scale
   galBHTransitionT = 0;
+  galBHDiskOriented = false;
   if (galBHSprite) { galBHSprite.visible = false; galBHSprite.material.opacity = 0; }
   if (blackHoleModel) {
     // Restore ring mesh visibility and alphaMul values for the Milky Way view
@@ -2629,6 +2632,7 @@ function exitGalacticView() {
   if (blackHoleModel && galacticCorePos) {
     blackHoleModel.position.copy(galacticCorePos);
     blackHoleModel.scale.set(1, 1, 1);
+    blackHoleModel.quaternion.identity(); // restore upright orientation for Milky Way view
     blackHoleModel.visible = false;
   }
   if (beauGaDisc) { beauGaDisc.material.opacity = 1.0; beauGaDisc.material.needsUpdate = true; }
@@ -2670,6 +2674,7 @@ function flyToSolarSystem() {
     lockedObject = null;
     galEarthZoomedIn = false;
     galBHTransitionT = 0;
+    galBHDiskOriented = false;
     if (blackHoleModel) {
       blackHoleModel.children.forEach(function(child) { child.visible = true; });
       if (galBHOrigAlphaMuls && bhDiskMaterials) {
@@ -3444,30 +3449,50 @@ function animate(){
   // ── End black hole transition ─────────────────────────────────────────────
 
   // ── Galactic view — black hole zoom-in ────────────────────────────────────
-  // Uses galBHSprite: a 2D canvas billboard (dark disk + orange ring) that
-  // always faces the camera → always reads as ONE centred black hole.
-  // The flat ring geometry (blackHoleModel) stays hidden in galactic view.
-  if (galacticViewActive && galaxyVisualRadius > 0) {
+  // Reuses the real blackHoleModel (ring mesh + lensing composer) same as the
+  // Milky Way view. Two galactic-view-specific fixes applied:
+  //   1. One-time disk tilt: quaternion set ONCE to face the camera's approach
+  //      direction — disk appears face-on, not as two side arcs.
+  //   2. Lensing centre: project world (0,0,0) instead of galacticCorePos
+  //      because the BH is repositioned to origin in galactic view coords.
+  if (galacticViewActive && galaxyVisualRadius > 0 && blackHoleModel) {
     const _galCamDist = camera.position.length();
     const _galRaw = 1.0 - Math.max(0.0, Math.min(1.0,
       (_galCamDist - GAL_BH_CLOSE) / (GAL_BH_FAR - GAL_BH_CLOSE)
     ));
     galBHTransitionT += (_galRaw - galBHTransitionT) * 0.05;
 
-    // Flat ring model: always hidden in galactic view (it looks like two arcs from above)
-    if (blackHoleModel) {
-      blackHoleModel.visible = false;
+    const _galF = 20.0 / (galaxyVisualRadius * 0.4);
+    blackHoleModel.position.set(0, 0, 0);
+    blackHoleModel.scale.setScalar(_galF);
+
+    // One-time tilt: rotate the BH group so the disk (local normal = Y axis)
+    // faces the camera's current approach direction. Done once so the disk
+    // does NOT follow the camera as the user orbits.
+    if (!galBHDiskOriented && galBHTransitionT > 0.01) {
+      const _approachDir = camera.position.clone().normalize();
+      blackHoleModel.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        _approachDir
+      );
+      galBHDiskOriented = true;
     }
 
-    // galBHSprite: 2D billboard black hole — fades in as galBHTransitionT rises
-    if (galBHSprite) {
-      galBHSprite.position.set(0, 0, 0);
-      const _bhOp = Math.min(1.0, galBHTransitionT * 2.0);
-      galBHSprite.material.opacity = _bhOp;
-      galBHSprite.visible = _bhOp > 0.01;
+    blackHoleModel.visible = galBHTransitionT > 0.04;
+
+    if (bhDiskMaterials && blackHoleModel.visible) {
+      const _gdt = deltaMs * 0.0005;
+      const _gZoomOut = 1.0 - galBHTransitionT;
+      for (var _gdi = 0; _gdi < bhDiskMaterials.length; _gdi++) {
+        bhDiskMaterials[_gdi].uniforms.uTime.value    += _gdt;
+        bhDiskMaterials[_gdi].uniforms.uZoomOut.value  = _gZoomOut;
+        if (galBHOrigAlphaMuls) {
+          bhDiskMaterials[_gdi].uniforms.uAlphaMul.value = galBHOrigAlphaMuls[_gdi];
+        }
+      }
     }
 
-    // galCentreSprite: approach indicator, fades as BH sprite takes over
+    // galCentreSprite fades out as BH takes over
     if (galCentreSprite) {
       galCentreSprite.material.opacity = Math.max(0.0, 1.0 - galBHTransitionT * 3.0);
       galCentreSprite.material.needsUpdate = true;
@@ -3476,13 +3501,14 @@ function animate(){
       beauGaDisc.material.opacity = Math.max(0.0, 1.0 - galBHTransitionT * 2.5);
       beauGaDisc.material.needsUpdate = true;
     }
+    if (galBHSprite) galBHSprite.visible = false; // not needed; real BH is shown
     if (bhStarfield) bhStarfield.visible = galBHTransitionT > 0.1;
   } else if (!galacticViewActive) {
     if (galBHTransitionT > 0) galBHTransitionT = 0;
     if (galBHSprite && galBHSprite.visible) galBHSprite.visible = false;
   }
-  if (galacticViewActive && galBHTransitionT < 0.01) {
-    if (galCentreSprite) galCentreSprite.material.opacity = 1.0;
+  if (galacticViewActive && galBHTransitionT < 0.01 && galCentreSprite) {
+    galCentreSprite.material.opacity = 1.0;
   }
   // ── End galactic view BH transition ───────────────────────────────────────
 
@@ -3784,9 +3810,11 @@ function animate(){
     controls.update();
     camera.updateMatrixWorld(true);
     if (bhLensingUniforms && galacticCorePos) {
-      _bhScreenPos.copy(galacticCorePos);
+      // In galactic view the BH is repositioned to world origin, not galacticCorePos
+      var _bhWorldPos = galacticViewActive ? new THREE.Vector3(0,0,0) : galacticCorePos;
+      _bhScreenPos.copy(_bhWorldPos);
       if (bhEHRadius > 0) {
-        var _camToBH = camera.position.distanceTo(galacticCorePos);
+        var _camToBH = camera.position.distanceTo(_bhWorldPos);
         var _halfTanFov = Math.tan(camera.fov * Math.PI / 360);
         var _shadowR = bhEHRadius / (_camToBH * _halfTanFov * 2.0);
         bhLensingUniforms.uShadowR.value = Math.max(_shadowR, 0.015);
