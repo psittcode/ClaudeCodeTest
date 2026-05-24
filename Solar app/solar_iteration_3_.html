@@ -3204,10 +3204,12 @@ function animate(){
   if (bhStarfield) bhStarfield.position.copy(camera.position);
   solarSystemMarker.visible = !bhRendererSettings && outsideSkybox && !galacticViewActive;
 
-  // Galaxy spin — only the need_some_space GLB rotates (via its pivot
-  // Group at galacticCorePos so it spins in place). The flat BeauGa
-  // disc stays static. 0.00012 rad/ms = ~52 s per revolution.
-  if (galaxyPivot) galaxyPivot.rotation.y += deltaMs * 0.00012;
+  // Galaxy spin — both the need_some_space GLB (via its pivot at
+  // galacticCorePos) and the BeauGa purple disc rotate around their
+  // own Y axes at the same rate. 0.00012 rad/ms = ~52 s per revolution.
+  var _galaxySpin = deltaMs * 0.00012;
+  if (galaxyPivot) galaxyPivot.rotation.y += _galaxySpin;
+  if (beauGaDisc)  beauGaDisc.rotation.y  += _galaxySpin;
 
   // === Galactic-core glow visibility & fade ===
   // Full bright at far zoom (replaces the BH model entirely when the
