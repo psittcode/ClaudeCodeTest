@@ -664,13 +664,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float ringInput2   = perturbLogR / ringSpacing2 + 0.3;',
       '  float ringDist2    = min(fract(ringInput2), 1.0 - fract(ringInput2));',
       // === Core + halo per ring (canvas "shadowBlur" emulation) ===
-      // Narrow bright core (K=80) + wider warm halo. Halo K varies with t:
-      // tighter at the inner edge (haloK=12 -> bigger blur, like
-      // shadowBlur:30 for the brightest inner rings) and looser further out
-      // (haloK=30 -> smaller blur, like shadowBlur:15-25 outer rings).
+      // Narrow bright core (K=80) + wider warm halo. Halo K varies with t
+      // and ALSO with camera zoom-out: as the camera retreats the halo
+      // widens (lower K -> wider Gaussian) so the world-space halo grows
+      // and the on-screen blur effect is preserved instead of shrinking
+      // away. Same blurry feel at far zoom as at close zoom.
       '  float core1 = exp(-ringDist1 * ringDist1 * 80.0);',
       '  float core2 = exp(-ringDist2 * ringDist2 * 80.0);',
       '  float haloK = mix(12.0, 30.0, smoothstep(0.0, 0.5, t));',
+      '  haloK *= 1.0 / (1.0 + uZoomOut * 0.6);',
       '  float halo1 = exp(-ringDist1 * ringDist1 * haloK);',
       '  float halo2 = exp(-ringDist2 * ringDist2 * haloK);',
       '  float coreMask = max(core1, core2);',
@@ -681,9 +683,10 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float ringIndex = floor(ringInput1 + 0.5);',
       '  float ringOpVar = 0.45 + 0.45 * hash21(vec2(ringIndex * 0.7, 3.0));',
       '  ringMaskHard *= ringOpVar;',
-      // Arc patchiness — narrowed (0.40+0.60 -> 0.60+0.40) so the dim end
-      // of the cloud range doesn't drop rings below the bleed floor.
-      '  ringMaskHard *= 0.60 + 0.40 * cloud;',
+      // Removed: rotating-cloud arc-patchiness multiplier was creating
+      // consistent dark shadow stripes that swept around the disk as the
+      // cloud field rotated with the disk. All brightness variation now
+      // comes from the static grain octaves below — no rotating shadows.
       // Grain strength ramps with radial position AND camera zoom-out.
       // Both ramps push toward 0.85 so a near-fully-swinging grain
       // multiplier acts at outer disk OR full zoom-out. At zoom-out from
@@ -700,10 +703,11 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       // gaps between rings get darker, letting the grain dominate visually.
       '  float bleedFloor = 0.05 * pow(max(1.0 - t, 0.0), 0.5) * (1.0 - 0.5 * uZoomOut);',
       '  ringMaskHard = max(ringMaskHard, bleedFloor);',
-      // === Soft haze base — diffuse glow behind rings (max alpha ~0.06) ===
-      // Ensures ringMask never drops below this faint base level inside the
-      // disk, giving the elliptical area a subtle ambient luminosity.
-      '  float baseHaze = 0.06 * (1.0 - smoothstep(0.0, 0.95, t));',
+      // === Soft haze base — diffuse glow behind rings ===
+      // Brightens with camera zoom-out (0.06 base * up to 2.5x) so the
+      // disk reads as a hazier glowing cloud from far away, preserving
+      // the blurry close-zoom look at any distance.
+      '  float baseHaze = 0.06 * (1.0 - smoothstep(0.0, 0.95, t)) * (1.0 + 1.5 * uZoomOut);',
       '  ringMaskHard = max(ringMaskHard, baseHaze);',
       // === Outer fog transition ===
       // For t > 0.65 the rings dissolve smoothly into a diffuse fog layer.
