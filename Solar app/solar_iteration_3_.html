@@ -553,9 +553,9 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     const _gx = _gc.getContext('2d');
     const _gd = _gx.createRadialGradient(128, 128, 0, 128, 128, 128);
     _gd.addColorStop(0.00, 'rgba(255, 252, 240, 1.00)');
-    _gd.addColorStop(0.15, 'rgba(255, 240, 210, 0.90)');
-    _gd.addColorStop(0.40, 'rgba(255, 205, 150, 0.45)');
-    _gd.addColorStop(0.70, 'rgba(220, 140, 80, 0.12)');
+    _gd.addColorStop(0.20, 'rgba(255, 240, 210, 0.95)');
+    _gd.addColorStop(0.45, 'rgba(255, 210, 160, 0.75)');
+    _gd.addColorStop(0.75, 'rgba(230, 160, 100, 0.40)');
     _gd.addColorStop(1.00, 'rgba(180, 90, 40, 0.00)');
     _gx.fillStyle = _gd;
     _gx.fillRect(0, 0, 256, 256);
@@ -3198,8 +3198,9 @@ function animate(){
     const showGlow = !bhRendererSettings && outsideSkybox && !galacticViewActive && !spaceshipViewActive;
     galacticGlowSprite.visible = showGlow;
     var _gOp = Math.max(0.0, Math.min(1.0, (0.90 - bhTransitionT) / 0.40));
-    // Dimmed further (0.55 -> 0.30) so the glow is just a soft ambient halo
-    galacticGlowSprite.material.opacity = _gOp * 0.30;
+    // Prominence bumped 0.30 -> 0.85 so the glow reads clearly at far zoom
+    // instead of being almost transparent.
+    galacticGlowSprite.material.opacity = _gOp * 0.85;
   }
   const _ssBtn = document.getElementById('solarSystemBtn');
   if (_ssBtn) _ssBtn.style.display = outsideSkybox ? 'block' : 'none';
