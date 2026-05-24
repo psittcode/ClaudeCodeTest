@@ -1059,17 +1059,33 @@ Its stability over billions of years has been a key factor in allowing complex l
 sun.castShadow = true;
 
 
-// SUBTLE GLOW (single layer only — remove sprite version)
-const glowGeometry = new THREE.SphereGeometry(3.0, 32, 32);
-const glowMaterial = new THREE.MeshBasicMaterial({
-  color: 0xffcc66,
-  transparent: true,
-  opacity: 0.10,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false
-});
-const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
-scene.add(glowMesh);
+// SUN GLOW — light-orb sprite (matches the galactic-core glow style)
+// Camera-facing canvas sprite with a soft radial gradient, so the Sun reads
+// as a luminous orb at every viewing angle/zoom instead of a flat shaded sphere.
+const glowMesh = (function() {
+  const _gc = document.createElement('canvas');
+  _gc.width = _gc.height = 256;
+  const _gx = _gc.getContext('2d');
+  const _gd = _gx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  _gd.addColorStop(0.00, 'rgba(255, 252, 240, 1.00)');
+  _gd.addColorStop(0.20, 'rgba(255, 240, 210, 0.95)');
+  _gd.addColorStop(0.45, 'rgba(255, 210, 160, 0.75)');
+  _gd.addColorStop(0.75, 'rgba(230, 160, 100, 0.40)');
+  _gd.addColorStop(1.00, 'rgba(180, 90, 40, 0.00)');
+  _gx.fillStyle = _gd;
+  _gx.fillRect(0, 0, 256, 256);
+  const _sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(_gc),
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  }));
+  // Sun core radius is 2; size the glow at ~7× to mirror the galactic-core proportions.
+  _sprite.scale.set(14, 14, 1);
+  _sprite.renderOrder = 4;
+  scene.add(_sprite);
+  return _sprite;
+})();
 
 // 🪐 PLANET DATA (FULL + RICH INFO)
 const data = [
