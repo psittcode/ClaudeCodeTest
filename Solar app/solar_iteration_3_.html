@@ -2270,6 +2270,12 @@ function resetSimulation() {
 
 document.getElementById('resetTime').onclick = () => {
   resetSimulation();
+  // Reset galaxy-spin pivot to angle 0 so the solar-system marker and
+  // milky way GLB snap back to their starting positions. BeauGa disc's
+  // quaternion goes back to its initial flat-horizontal orientation
+  // (only rotation.x = -π/2, no Y spin accumulated).
+  if (galaxyPivot) galaxyPivot.rotation.y = 0;
+  if (beauGaDisc)  beauGaDisc.quaternion.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
   // Galactic angle has no real-life ephemeris — convention: angle=0 means "now"
   if (galacticViewActive) {
     galacticAngle = 0;
@@ -2616,6 +2622,14 @@ function flyToSolarSystem() {
   const endPos      = new THREE.Vector3(0, 22, 110);
   const endTarget   = new THREE.Vector3(0, 0, 0);
 
+  // Capture starting galaxy spin so we can rotate it back to angle 0
+  // over the fly — that brings the orbiting solarSystemMarker back to
+  // world origin (where the actual planet meshes live) by the time the
+  // camera arrives.
+  const _startGalaxyAngle = galaxyPivot ? galaxyPivot.rotation.y : 0;
+  const _startBeauGaQuat  = beauGaDisc ? beauGaDisc.quaternion.clone() : null;
+  const _endBeauGaQuat    = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+
   let t = 0;
   (function flyIn() {
     if (myGeneration !== flyGeneration) { isFlyingTo = false; return; }
@@ -2626,6 +2640,13 @@ function flyToSolarSystem() {
     camera.position.lerpVectors(startPos, endPos, ease);
     controls.target.lerpVectors(startTarget, endTarget, ease);
     camera.up.set(Math.sin(ECLIPTIC_TILT), Math.cos(ECLIPTIC_TILT), 0);
+
+    // Animate galaxy spin back toward angle 0 alongside the camera fly
+    if (galaxyPivot) galaxyPivot.rotation.y = _startGalaxyAngle * (1.0 - ease);
+    if (beauGaDisc && _startBeauGaQuat) {
+      beauGaDisc.quaternion.copy(_startBeauGaQuat).slerp(_endBeauGaQuat, ease);
+    }
+
     controls.update();
 
     if (t < 1) requestAnimationFrame(flyIn);
@@ -3221,9 +3242,13 @@ function animate(){
   // `speed` slider drives both, so when the user speeds up the planets
   // the galaxy spin speeds up identically. The solarSystemMarker is
   // parented under galaxyPivot so its position orbits along too.
-  var _galaxySpin = 0.000000395 * speed * deltaScale;
-  if (galaxyPivot) galaxyPivot.rotation.y += _galaxySpin;
-  if (beauGaDisc)  beauGaDisc.rotateOnWorldAxis(_galaxyAxis, _galaxySpin);
+  // Paused during fly-to animations because the fly may be explicitly
+  // animating galaxyPivot back toward angle 0 (e.g. flyToSolarSystem).
+  if (!isFlyingTo) {
+    var _galaxySpin = 0.000000395 * speed * deltaScale;
+    if (galaxyPivot) galaxyPivot.rotation.y += _galaxySpin;
+    if (beauGaDisc)  beauGaDisc.rotateOnWorldAxis(_galaxyAxis, _galaxySpin);
+  }
 
   // === Galactic-core glow visibility & fade ===
   // Full bright at far zoom (replaces the BH model entirely when the
