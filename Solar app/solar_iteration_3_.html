@@ -624,15 +624,10 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       'void main(){',
       '  float t    = clamp((vRadius - uInnerR) / (uOuterR - uInnerR), 0.0, 1.0);',
       '  float logR = log(max(vRadius / max(uInnerR, 0.001), 1.001));',
-      // Cloud noise — NO uLayerY offset. All 5 stacked disk layers sample
-      // the same cloud / rotating-grain noise so when viewed straight down
-      // (above) or straight up (below) the layers reinforce the same
-      // pattern at each pixel instead of averaging independent samples
-      // into a smooth mean. Edge-on depth comes from Y offset alone.
-      '  float rotAng = vAngle - uTime * 0.18;',
-      '  vec2  pCloud = vec2(vRadius*cos(rotAng), vRadius*sin(rotAng)) / max(uInnerR * 0.55, 0.001);',
-      '  float cloud   = fbm4(pCloud);',
-      '  float grain   = vnoise(pCloud * 11.0);',
+      // All noise now uses pStatic (non-rotating). The rotating pCloud
+      // noise was producing visible shadow-stripe patterns sweeping
+      // around the disk via color/grain modulations. The disk's apparent
+      // motion gives way to a stable, stripe-free texture.
       // Static (non-rotating) disk-local coords — large features stay fixed
       // in world space, so they can\'t sweep around the BH and form arc
       // stripes. NO uLayerY offset here: all 5 stacked disk layers sample
@@ -641,14 +636,18 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       // averaging independent samples to a smooth mean. Grain stays
       // visible from any viewing angle including straight above / below.
       '  vec2 pStatic = vec2(vRadius*cos(vAngle), vRadius*sin(vAngle)) / max(uInnerR * 0.55, 0.001);',
-      // Two grain octaves only. Six-octave blend had std-dev of only ~0.12
-      // (averaging killed the amplitude); two octaves give ~0.21 std-dev
-      // so grain actually swings visibly even at zoom-out. grainBig at
-      // scale 1.0 is the dominant huge static octave (visible at any
-      // camera distance), grainFine at scale 20 adds close-up detail.
+      // All grain octaves on pStatic (no rotation) so they can\'t form
+      // arc-shaped shadow stripes. Two octaves: huge for any-zoom
+      // visibility + fine for close-up detail.
       '  float grainBig  = vnoise(pStatic * 1.0);',
-      '  float grainFine = vnoise(pCloud * 20.0);',
+      '  float grainFine = vnoise(pStatic * 20.0);',
       '  float grainHi   = 0.70 * grainBig + 0.30 * grainFine;',
+      // Static "cloud" noise replaces the old rotating cloud for color
+      // brightness variation. Slightly smaller scale (1.4) so it differs
+      // from the grain modulation and adds visible texture without
+      // creating rotating shadow patterns.
+      '  float cloudS = vnoise(pStatic * 1.4);',
+      '  float grainColor = vnoise(pStatic * 8.0);',
       // === Dual ring sets — ~80 rings with non-uniform clustering ===
       // Two ring sets at spacings 0.030 and 0.044 in logR (was 0.14 / 0.20).
       // Set 1 -> ~80 rings, set 2 -> ~55 rings. They drift in and out of
@@ -664,20 +663,23 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float ringInput2   = perturbLogR / ringSpacing2 + 0.3;',
       '  float ringDist2    = min(fract(ringInput2), 1.0 - fract(ringInput2));',
       // === Core + halo per ring (canvas "shadowBlur" emulation) ===
-      // Narrow bright core (K=80) + wider warm halo. Halo K varies with t
-      // and ALSO with camera zoom-out: as the camera retreats the halo
-      // widens (lower K -> wider Gaussian) so the world-space halo grows
-      // and the on-screen blur effect is preserved instead of shrinking
-      // away. Same blurry feel at far zoom as at close zoom.
+      // Halo widens AND brightens with zoom-out so the world-space halo
+      // grows in screen size as the camera retreats — same blurry feel at
+      // far zoom as at close zoom.
       '  float core1 = exp(-ringDist1 * ringDist1 * 80.0);',
       '  float core2 = exp(-ringDist2 * ringDist2 * 80.0);',
       '  float haloK = mix(12.0, 30.0, smoothstep(0.0, 0.5, t));',
-      '  haloK *= 1.0 / (1.0 + uZoomOut * 0.6);',
+      // Aggressive widening: at full zoom-out, haloK -> haloK/3 so the
+      // halo is 3x wider in world-space than at close zoom.
+      '  haloK *= 1.0 / (1.0 + uZoomOut * 2.0);',
       '  float halo1 = exp(-ringDist1 * ringDist1 * haloK);',
       '  float halo2 = exp(-ringDist2 * ringDist2 * haloK);',
       '  float coreMask = max(core1, core2);',
       '  float haloMask = max(halo1, halo2);',
-      '  float ringMaskHard = max(coreMask, haloMask * 0.40);',
+      // Halo brightness also boosted with zoom-out: 0.40 -> up to 0.80
+      // so the diffuse glow dominates over crisp ring cores at far zoom.
+      '  float haloMul = mix(0.40, 0.80, uZoomOut);',
+      '  float ringMaskHard = max(coreMask, haloMask * haloMul);',
       // Per-ring opacity — narrowed to [0.45, 0.90] so the dimmest rings
       // still pop visibly above the uniform bleed floor below.
       '  float ringIndex = floor(ringInput1 + 0.5);',
@@ -704,16 +706,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float bleedFloor = 0.05 * pow(max(1.0 - t, 0.0), 0.5) * (1.0 - 0.5 * uZoomOut);',
       '  ringMaskHard = max(ringMaskHard, bleedFloor);',
       // === Soft haze base — diffuse glow behind rings ===
-      // Brightens with camera zoom-out (0.06 base * up to 2.5x) so the
-      // disk reads as a hazier glowing cloud from far away, preserving
-      // the blurry close-zoom look at any distance.
-      '  float baseHaze = 0.06 * (1.0 - smoothstep(0.0, 0.95, t)) * (1.0 + 1.5 * uZoomOut);',
+      // Brightens with zoom-out (0.06 -> 0.18 max) for ambient cloud glow.
+      // Capped so it doesn\'t overpower grain variation in gaps.
+      '  float baseHaze = 0.06 * (1.0 - smoothstep(0.0, 0.95, t)) * (1.0 + 2.0 * uZoomOut);',
       '  ringMaskHard = max(ringMaskHard, baseHaze);',
       // === Outer fog transition ===
       // For t > 0.65 the rings dissolve smoothly into a diffuse fog layer.
       // fogMix=0 -> pure ring-gated alpha; fogMix=1 -> pure cloud-driven fog.
       '  float fogMix   = smoothstep(0.65, 0.92, t);',
-      '  float fogAlpha = 0.25 + 0.40 * cloud;',
+      '  float fogAlpha = 0.25 + 0.40 * cloudS;',
       '  float effMask  = mix(ringMaskHard, fogAlpha, fogMix);',
       // === Colour gradient — hot inner to cool outer ===
       // Inner: white-yellow -> yellow-orange (hot plasma)
@@ -728,9 +729,9 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  else if (t < 0.85) { col = mix(vec3(0.80,0.40,0.27), vec3(0.67,0.47,0.40), smoothstep(0.68, 0.85, t)); }',
       '  else if (t < 0.95) { col = mix(vec3(0.67,0.47,0.40), vec3(0.73,0.67,0.80), smoothstep(0.85, 0.95, t)); }',
       '  else               { col = mix(vec3(0.73,0.67,0.80), vec3(0.93,0.93,1.00), smoothstep(0.95, 1.00, t)); }',
-      // Cloud + grain — subtle brightness variation, no hue change
-      '  col *= (0.85 + 0.20 * cloud);',
-      '  col *= (0.92 + 0.16 * grain);',
+      // Static colour brightness variation (no rotation -> no shadow stripes)
+      '  col *= (0.85 + 0.20 * cloudS);',
+      '  col *= (0.92 + 0.16 * grainColor);',
       // === Inner Planckian boost — applied to colour (not alpha) so the
       // per-ring opacity hash (0.30-0.90) doesn't saturate inside the cap
       // at the inner edge where pBoost would otherwise blow alpha to 1.
