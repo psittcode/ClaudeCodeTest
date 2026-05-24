@@ -632,9 +632,12 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  vec2  pCloud = pBase + vec2(uLayerY * 0.6, uLayerY * 0.4);',
       '  float cloud   = fbm4(pCloud);',
       '  float grain   = vnoise(pCloud * 11.0);',
-      // grainHi at very high frequency — features so small the disk's
-      // rotation can't form visible arc stripes, only "boiling" texture.
-      '  float grainHi = vnoise(pCloud * 32.0);',
+      // Two high-frequency grain octaves combined for richer turbulent
+      // texture — features at both scales are too small for the disk
+      // rotation to form visible arc stripes, only "boiling" detail.
+      '  float grainHi1 = vnoise(pCloud * 32.0);',
+      '  float grainHi2 = vnoise(pCloud * 75.0);',
+      '  float grainHi  = 0.55 * grainHi1 + 0.45 * grainHi2;',
       // === Dual ring sets — ~80 rings with non-uniform clustering ===
       // Two ring sets at spacings 0.030 and 0.044 in logR (was 0.14 / 0.20).
       // Set 1 -> ~80 rings, set 2 -> ~55 rings. They drift in and out of
@@ -667,20 +670,19 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       // Arc patchiness — narrowed (0.40+0.60 -> 0.60+0.40) so the dim end
       // of the cloud range doesn't drop rings below the bleed floor.
       '  ringMaskHard *= 0.60 + 0.40 * cloud;',
-      // Grainy / cloud-like ring profile — multiplying by high-frequency
-      // grainHi breaks the smooth Gaussian "rubber band" profile into
-      // stippled cloud texture. grainHi features are so small that the
-      // disk rotation can't form visible arc stripes — the grain reads as
-      // consistent boiling cloud detail around the entire disk.
-      // Range narrowed to 0.65-1.00 so the dimmest ring (hash 0.45 * cloud
-      // 0.60 * grain 0.65 = 0.176) still pops above the bleed floor (0.15).
-      '  ringMaskHard *= 0.65 + 0.35 * grainHi;',
+      // Aggressive grain modulation — range 0.40-1.00 means each ring's
+      // brightness varies up to 2.5x across its arc, so it reads as a
+      // broken stippled cloud filament rather than a smooth rubber band.
+      // Two grain octaves (32x and 75x) combined give fine-detail boiling
+      // texture; both frequencies are too small for the disk rotation to
+      // form visible arc stripes.
+      '  ringMaskHard *= 0.40 + 0.60 * grainHi;',
       // === Uniform bleed — gentle gap-fill, ring peaks stay clearly above ===
-      // Floor dropped 0.35 -> 0.15. With ring peak minimum now ~0.27
-      // (0.45 hash * 0.60 cloud), every ring is ~1.8x brighter than the
-      // bleed floor — the "just right" gap visibility from the bright
-      // patches now applies across the entire disk, no solid-mass patches.
-      '  ringMaskHard = max(ringMaskHard, 0.15);',
+      // Floor dropped 0.15 -> 0.08 to make room for the wider grain
+      // modulation (0.40-1.00). Minimum ring brightness after all factors
+      // is 0.45 * 0.60 * 0.40 = 0.108, still ~1.35x the bleed floor so
+      // even grain-dark ring patches stay visibly above the gap level.
+      '  ringMaskHard = max(ringMaskHard, 0.08);',
       // === Soft haze base — diffuse glow behind rings (max alpha ~0.06) ===
       // Ensures ringMask never drops below this faint base level inside the
       // disk, giving the elliptical area a subtle ambient luminosity.
