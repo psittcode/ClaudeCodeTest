@@ -624,12 +624,13 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       'void main(){',
       '  float t    = clamp((vRadius - uInnerR) / (uOuterR - uInnerR), 0.0, 1.0);',
       '  float logR = log(max(vRadius / max(uInnerR, 0.001), 1.001));',
-      // Cloud noise — uLayerY offset gives each of the 5 stacked disks a
-      // different slice of the noise field (visible edge-on as turbulent
-      // thickness rather than 5 identical 2D patterns).
+      // Cloud noise — NO uLayerY offset. All 5 stacked disk layers sample
+      // the same cloud / rotating-grain noise so when viewed straight down
+      // (above) or straight up (below) the layers reinforce the same
+      // pattern at each pixel instead of averaging independent samples
+      // into a smooth mean. Edge-on depth comes from Y offset alone.
       '  float rotAng = vAngle - uTime * 0.18;',
-      '  vec2  pBase  = vec2(vRadius*cos(rotAng), vRadius*sin(rotAng)) / max(uInnerR * 0.55, 0.001);',
-      '  vec2  pCloud = pBase + vec2(uLayerY * 0.6, uLayerY * 0.4);',
+      '  vec2  pCloud = vec2(vRadius*cos(rotAng), vRadius*sin(rotAng)) / max(uInnerR * 0.55, 0.001);',
       '  float cloud   = fbm4(pCloud);',
       '  float grain   = vnoise(pCloud * 11.0);',
       // Static (non-rotating) disk-local coords — large features stay fixed
@@ -653,12 +654,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       // Two ring sets at spacings 0.030 and 0.044 in logR (was 0.14 / 0.20).
       // Set 1 -> ~80 rings, set 2 -> ~55 rings. They drift in and out of
       // alignment for natural clustering.
+      // Ring positions NO uLayerY offset — all 5 layers' rings land at the
+      // same radii so from above the layers reinforce the ring structure
+      // rather than smearing it across slightly offset radial positions.
       '  float perturbLogR  = logR + 0.02 * sin(logR * 5.0 + 1.0);',
       '  float ringSpacing1 = 0.030;',
-      '  float ringInput1   = perturbLogR / ringSpacing1 + uLayerY * 0.04;',
+      '  float ringInput1   = perturbLogR / ringSpacing1;',
       '  float ringDist1    = min(fract(ringInput1), 1.0 - fract(ringInput1));',
       '  float ringSpacing2 = 0.044;',
-      '  float ringInput2   = perturbLogR / ringSpacing2 + uLayerY * 0.06 + 0.3;',
+      '  float ringInput2   = perturbLogR / ringSpacing2 + 0.3;',
       '  float ringDist2    = min(fract(ringInput2), 1.0 - fract(ringInput2));',
       // === Core + halo per ring (canvas "shadowBlur" emulation) ===
       // Narrow bright core (K=80) + wider warm halo. Halo K varies with t:
