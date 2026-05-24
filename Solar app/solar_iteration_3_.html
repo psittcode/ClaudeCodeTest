@@ -566,7 +566,7 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       depthWrite: false,
       depthTest: false
     }));
-    const _glowSize = galaxyRadius * 0.72;
+    const _glowSize = galaxyRadius * 0.18;
     galacticGlowSprite.scale.set(_glowSize, _glowSize, 1);
     galacticGlowSprite.position.copy(galacticCorePos);
     galacticGlowSprite.renderOrder = 4; // above galaxy disc and model
@@ -3198,9 +3198,9 @@ function animate(){
     const showGlow = !bhRendererSettings && outsideSkybox && !galacticViewActive && !spaceshipViewActive;
     galacticGlowSprite.visible = showGlow;
     var _gOp = Math.max(0.0, Math.min(1.0, (0.90 - bhTransitionT) / 0.40));
-    // Prominence bumped 0.30 -> 0.85 so the glow reads clearly at far zoom
-    // instead of being almost transparent.
-    galacticGlowSprite.material.opacity = _gOp * 0.85;
+    // Glow now smaller (galaxyRadius * 0.18) so reduce opacity to match —
+    // less prominence in the centre, still readable at far zoom.
+    galacticGlowSprite.material.opacity = _gOp * 0.50;
   }
   const _ssBtn = document.getElementById('solarSystemBtn');
   if (_ssBtn) _ssBtn.style.display = outsideSkybox ? 'block' : 'none';
