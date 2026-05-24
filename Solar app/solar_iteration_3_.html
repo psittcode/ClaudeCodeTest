@@ -632,15 +632,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  vec2  pCloud = pBase + vec2(uLayerY * 0.6, uLayerY * 0.4);',
       '  float cloud  = fbm4(pCloud);',
       '  float grain  = vnoise(pCloud * 11.0);',
-      // === Dual ring sets — 25-35 rings with non-uniform clustering ===
-      // Two ring sets at spacings 0.14 and 0.20 in logR. They drift in and
-      // out of alignment so some rings land close together (grouped) and
-      // others sit well apart (visible gap).
-      '  float perturbLogR  = logR + 0.04 * sin(logR * 5.0 + 1.0);',
-      '  float ringSpacing1 = 0.14;',
+      // === Dual ring sets — ~80 rings with non-uniform clustering ===
+      // Two ring sets at spacings 0.030 and 0.044 in logR (was 0.14 / 0.20).
+      // Set 1 -> ~80 rings, set 2 -> ~55 rings. They drift in and out of
+      // alignment for natural clustering.
+      '  float perturbLogR  = logR + 0.02 * sin(logR * 5.0 + 1.0);',
+      '  float ringSpacing1 = 0.030;',
       '  float ringInput1   = perturbLogR / ringSpacing1 + uLayerY * 0.04;',
       '  float ringDist1    = min(fract(ringInput1), 1.0 - fract(ringInput1));',
-      '  float ringSpacing2 = 0.20;',
+      '  float ringSpacing2 = 0.044;',
       '  float ringInput2   = perturbLogR / ringSpacing2 + uLayerY * 0.06 + 0.3;',
       '  float ringDist2    = min(fract(ringInput2), 1.0 - fract(ringInput2));',
       // === Core + halo per ring (canvas "shadowBlur" emulation) ===
@@ -700,12 +700,13 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       '  float pr        = exp(-(innerDist*innerDist) / (2.0*sigma*sigma));',
       '  col *= 1.0 + 0.8 * pr;',
       // === Alpha — radial falloff × ring mask ===
-      // Cap raised 0.35 -> 0.55 so the 0.30-0.90 per-ring opacity hash
-      // actually translates to visible brightness variation across rings
-      // instead of all saturating against a low ceiling.
+      // Cap dropped 0.55 -> 0.38 to compensate for the higher ring count.
+      // With ~80 rings cumulatively additive blending across 5 layers, a
+      // lower per-layer cap is needed to keep the cumulative disk from
+      // saturating into one opaque mass.
       '  float bright = pow(max(1.0-t, 0.0), 1.3) * 1.4;',
       '  float alpha  = clamp(effMask * bright, 0.0, 1.0);',
-      '  alpha = min(alpha, 0.55);',
+      '  alpha = min(alpha, 0.38);',
       '  alpha *= uAlphaMul;',
       '  gl_FragColor = vec4(col, alpha);',
       '}'
