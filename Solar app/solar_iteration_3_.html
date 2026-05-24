@@ -479,6 +479,7 @@ let bhEHRadius            = 0;   // event horizon sphere world-space radius (for
 let bhStarfield           = null; // procedural starfield for BH mode (no galactic band)
 let bhDiskMaterials       = null; // materials of each stacked disk layer, for uTime animation
 let galacticGlowSprite    = null; // bright white glow at the galactic core, visible at far zoom before BH detail kicks in
+let galaxyPivot           = null; // pivot Group at galacticCorePos so milkyWayModel rotates wobble-free
 const _bhScreenPos        = new THREE.Vector3();
 let _bhSavedVisibility    = null;
 
@@ -542,6 +543,20 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
     0
   );
   galaxyVisualRadius = galaxyRadius;
+
+  // === Pivot Group at galacticCorePos so the GLB rotates wobble-free ===
+  // The model's local origin sits at the bbox-centre offset (milkyWayModel.position
+  // = -center) which means a direct milkyWayModel.rotation.y would orbit the
+  // bbox centre AROUND the local origin. Wrapping in a Group whose origin IS
+  // at galacticCorePos lets the rotation happen around the actual galaxy
+  // centre instead.
+  galaxyPivot = new THREE.Group();
+  galaxyPivot.position.copy(galacticCorePos);
+  scene.add(galaxyPivot);
+  const _prevModelWorldPos = milkyWayModel.position.clone();
+  scene.remove(milkyWayModel);
+  galaxyPivot.add(milkyWayModel);
+  milkyWayModel.position.copy(_prevModelWorldPos).sub(galacticCorePos);
 
   // === Galactic-core white glow sprite ===
   // A bright luminous spot at the galactic centre, visible from far zoom
@@ -3189,12 +3204,10 @@ function animate(){
   if (bhStarfield) bhStarfield.position.copy(camera.position);
   solarSystemMarker.visible = !bhRendererSettings && outsideSkybox && !galacticViewActive;
 
-  // Galaxy spin — rotate need_some_space GLB and the BeauGa disc around
-  // their Y axes so the galaxy is visibly orbiting around itself.
-  // 0.00012 rad/ms = ~52 s per full revolution.
-  var _galaxySpin = deltaMs * 0.00012;
-  if (milkyWayModel) milkyWayModel.rotation.y += _galaxySpin;
-  if (beauGaDisc)    beauGaDisc.rotation.y    += _galaxySpin;
+  // Galaxy spin — only the need_some_space GLB rotates (via its pivot
+  // Group at galacticCorePos so it spins in place). The flat BeauGa
+  // disc stays static. 0.00012 rad/ms = ~52 s per revolution.
+  if (galaxyPivot) galaxyPivot.rotation.y += deltaMs * 0.00012;
 
   // === Galactic-core glow visibility & fade ===
   // Full bright at far zoom (replaces the BH model entirely when the
