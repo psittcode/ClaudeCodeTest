@@ -633,12 +633,15 @@ gltfLoader.load('need_some_space.glb', function(gltf) {
       // sweep around the BH over time to give the disk a sense of flow.
       '  float rotAng = vAngle - uTime * 0.18;',
       '  vec2 pCloud  = vec2(vRadius*cos(rotAng), vRadius*sin(rotAng)) / max(uInnerR * 0.55, 0.001);',
-      // All grain octaves on pStatic (no rotation) so they can\'t form
-      // arc-shaped shadow stripes. Two octaves: huge for any-zoom
-      // visibility + fine for close-up detail.
-      '  float grainBig  = vnoise(pStatic * 1.0);',
+      // Grain octaves on pStatic (no rotation). grainBig scale bumped
+      // 1.0 -> 3.5 so the dark patches of the noise field are ~3x smaller
+      // — small enough that they no longer span large angular arcs on
+      // the disk and don\'t read as shadow blobs / strips. Weights
+      // shifted 0.70/0.30 -> 0.50/0.50 so the large grain doesn\'t
+      // dominate visually either.
+      '  float grainBig  = vnoise(pStatic * 3.5);',
       '  float grainFine = vnoise(pStatic * 20.0);',
-      '  float grainHi   = 0.70 * grainBig + 0.30 * grainFine;',
+      '  float grainHi   = 0.50 * grainBig + 0.50 * grainFine;',
       // Static colour-modulation noise sources.
       '  float cloudS     = vnoise(pStatic * 1.4);',
       '  float grainColor = vnoise(pStatic * 8.0);',
