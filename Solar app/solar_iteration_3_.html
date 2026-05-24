@@ -1067,11 +1067,11 @@ const glowMesh = (function() {
   _gc.width = _gc.height = 256;
   const _gx = _gc.getContext('2d');
   const _gd = _gx.createRadialGradient(128, 128, 0, 128, 128, 128);
-  _gd.addColorStop(0.00, 'rgba(255, 252, 240, 1.00)');
-  _gd.addColorStop(0.20, 'rgba(255, 240, 210, 0.95)');
-  _gd.addColorStop(0.45, 'rgba(255, 210, 160, 0.75)');
-  _gd.addColorStop(0.75, 'rgba(230, 160, 100, 0.40)');
-  _gd.addColorStop(1.00, 'rgba(180, 90, 40, 0.00)');
+  _gd.addColorStop(0.00, 'rgba(255, 240, 170, 1.00)');
+  _gd.addColorStop(0.20, 'rgba(255, 215, 110, 0.95)');
+  _gd.addColorStop(0.45, 'rgba(255, 175,  60, 0.75)');
+  _gd.addColorStop(0.75, 'rgba(235, 120,  20, 0.40)');
+  _gd.addColorStop(1.00, 'rgba(180,  70,   0, 0.00)');
   _gx.fillStyle = _gd;
   _gx.fillRect(0, 0, 256, 256);
   const _sprite = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -1080,8 +1080,8 @@ const glowMesh = (function() {
     blending: THREE.AdditiveBlending,
     depthWrite: false
   }));
-  // Sun core radius is 2; size the glow at ~7× to mirror the galactic-core proportions.
-  _sprite.scale.set(14, 14, 1);
+  // Sun core diameter is 4 (radius 2); match the glow sprite to that size.
+  _sprite.scale.set(4, 4, 1);
   _sprite.renderOrder = 4;
   scene.add(_sprite);
   return _sprite;
