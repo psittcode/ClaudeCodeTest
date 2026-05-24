@@ -3189,6 +3189,13 @@ function animate(){
   if (bhStarfield) bhStarfield.position.copy(camera.position);
   solarSystemMarker.visible = !bhRendererSettings && outsideSkybox && !galacticViewActive;
 
+  // Galaxy spin — rotate need_some_space GLB and the BeauGa disc around
+  // their Y axes so the galaxy is visibly orbiting around itself.
+  // 0.00012 rad/ms = ~52 s per full revolution.
+  var _galaxySpin = deltaMs * 0.00012;
+  if (milkyWayModel) milkyWayModel.rotation.y += _galaxySpin;
+  if (beauGaDisc)    beauGaDisc.rotation.y    += _galaxySpin;
+
   // === Galactic-core glow visibility & fade ===
   // Full bright at far zoom (replaces the BH model entirely when the
   // model is hidden at bhTransitionT < 0.15). Fades out as the user
